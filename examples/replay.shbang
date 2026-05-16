@@ -1,0 +1,4 @@
+// Minimal replay proof.
+for_each ${topology.shards[shard3]}
+| @${host}:${install.dir}/datadir/archive send ${resources.replayJar}
+| #${host}:${install.dir}/datadir/archive run ${java} -jar replay.jar --vpn ${vpn} --user ${user.name}

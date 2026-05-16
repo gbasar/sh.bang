@@ -1,0 +1,70 @@
+{
+  "help": {
+    "usage": [
+      "usage:",
+      "  sh.bang --version",
+      "  sh.bang [-v|-vv|-vvv|-vvvv] run PLAYBOOK --ctx CONTEXT.json [--dry-run]"
+    ]
+  },
+  "flags": {
+    "-v": {
+      "kind": "verbosity",
+      "level": 1
+    },
+    "-vv": {
+      "kind": "verbosity",
+      "level": 2
+    },
+    "-vvv": {
+      "kind": "verbosity",
+      "level": 3
+    },
+    "-vvvv": {
+      "kind": "verbosity",
+      "level": 4
+    },
+    "--verbose": {
+      "kind": "verbosity",
+      "level": 1
+    },
+    "--version": {
+      "kind": "version"
+    },
+    "-h": {
+      "kind": "help"
+    },
+    "--help": {
+      "kind": "help"
+    },
+    "--ctx": {
+      "kind": "ctx",
+      "takesValue": true
+    },
+    "--dry-run": {
+      "kind": "dry_run"
+    }
+  },
+  "verbosity": {
+    "-v": {
+      "name": "info",
+      "description": "show run inputs"
+    },
+    "-vv": {
+      "name": "debug",
+      "description": "show parser decisions"
+    },
+    "-vvv": {
+      "name": "trace",
+      "description": "show each playbook line"
+    },
+    "-vvvv": {
+      "name": "wire",
+      "description": "show detailed command fields"
+    }
+  },
+  "commands": {
+    "run": {
+      "description": "parse and execute a playbook"
+    }
+  }
+}

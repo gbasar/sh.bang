@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SHBANG_VERSION="0.1.0"
+readonly SHBANG_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly SHBANG_CLI_SPEC="$SHBANG_HOME/spec/cli.json"
+
+source "$SHBANG_HOME/lib/log.sh"
+source "$SHBANG_HOME/lib/events.sh"
+source "$SHBANG_HOME/lib/parser.sh"
+source "$SHBANG_HOME/lib/router.sh"
+
+declare -A SHBANG_COMMANDS=(
+  [run]=cmd_run
+)
+
+main() {
+  local -A runtime
+  runtime_init runtime
+  route_cli runtime "$@"
+}
+
+runtime_init() {
+  local -n rt=$1
+
+  rt=(
+    [verbosity]=0
+    [dry_run]=false
+    [version]="$SHBANG_VERSION"
+    [home]="$SHBANG_HOME"
+    [cli_spec]="$SHBANG_CLI_SPEC"
+    [event_handlers]="console"
+    [event_file]=""
+  )
+}
+
+cmd_run() {
+  local -n rt=$1
+  shift
+
+  local -A opts
+  parse_run_args rt opts "$@"
+
+  emit_kv rt run.loaded \
+    playbook "${opts[playbook]}" \
+    ctx "${opts[ctx]}"
+
+  log_debug "bash: ${BASH_VERSION}"
+  parse_playbook rt "${opts[playbook]}"
+}
+
+main "$@"
