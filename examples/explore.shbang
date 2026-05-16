@@ -1,0 +1,4 @@
+// Explore local directories — list contents and total size
+for_each ${dirs}
+| @${path} size
+| @${path} list

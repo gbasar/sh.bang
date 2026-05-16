@@ -1,0 +1,16 @@
+{
+  "verbs": {
+    "list": {
+      "kind": "local",
+      "argv": ["ls", "-lAh"]
+    },
+    "size": {
+      "kind": "local",
+      "argv": ["du", "-sh", "--"]
+    },
+    "count": {
+      "kind": "local",
+      "argv": ["find", "-maxdepth", "1", "-mindepth", "1"]
+    }
+  }
+}

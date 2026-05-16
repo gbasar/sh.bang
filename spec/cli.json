@@ -1,9 +1,11 @@
 {
   "help": {
     "usage": [
-      "usage:",
+      "sh.bang — run declarative remote playbooks",
+      "",
+      "  sh.bang run PLAYBOOK --ctx CONTEXT.json [flags]",
       "  sh.bang --version",
-      "  sh.bang [-v|-vv|-vvv|-vvvv] run PLAYBOOK --ctx CONTEXT.json [--dry-run]"
+      "  sh.bang --help"
     ]
   },
   "flags": {

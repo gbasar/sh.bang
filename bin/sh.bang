@@ -8,45 +8,51 @@ readonly SHBANG_CLI_SPEC="$SHBANG_HOME/spec/cli.json"
 source "$SHBANG_HOME/lib/log.sh"
 source "$SHBANG_HOME/lib/events.sh"
 source "$SHBANG_HOME/lib/parser.sh"
+source "$SHBANG_HOME/lib/executor.sh"
 source "$SHBANG_HOME/lib/router.sh"
 
-declare -A SHBANG_COMMANDS=(
-  [run]=cmd_run
-)
+# Global runtime — all state lives here. Functions access it by name,
+# not by threading a reference through every parameter.
+declare -gA SHBANG_RT
+declare -g  SHBANG_RT_NAME=SHBANG_RT
+
+declare -A SHBANG_COMMANDS
+SHBANG_COMMANDS[run]=cmd_run
 
 main() {
-  local -A runtime
-  runtime_init runtime
-  route_cli runtime "$@"
+  runtime_init
+  route_cli "$@"
 }
 
 runtime_init() {
-  local -n rt=$1
-
-  rt=(
+  SHBANG_RT=(
     [verbosity]=0
     [dry_run]=false
     [version]="$SHBANG_VERSION"
     [home]="$SHBANG_HOME"
     [cli_spec]="$SHBANG_CLI_SPEC"
-    [event_handlers]="console"
     [event_file]=""
   )
 }
 
 cmd_run() {
-  local -n rt=$1
-  shift
+  local -a args=("$@")
+  local -A opts=()
 
-  local -A opts
-  parse_run_args rt opts "$@"
+  parse_run_args args opts
 
-  emit_kv rt run.loaded \
+  local -n rt=$SHBANG_RT_NAME
+  rt[ctx]=${opts[ctx]}
+
+  emit_kv run.loaded \
     playbook "${opts[playbook]}" \
-    ctx "${opts[ctx]}"
+    ctx      "${opts[ctx]}"
 
-  log_debug "bash: ${BASH_VERSION}"
-  parse_playbook rt "${opts[playbook]}"
+  log_debug "bash ${BASH_VERSION}"
+
+  local -a nodes=()
+  parse_playbook "${opts[playbook]}" nodes
+  execute_playbook nodes
 }
 
 main "$@"

@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 
-declare -A GLOBAL_FLAG_HANDLERS=(
-  [verbosity]=handle_flag_verbosity
-  [version]=handle_flag_version
-  [help]=handle_flag_help
-)
+# ── Flag handler tables ───────────────────────────────────────────────────────
 
-declare -A RUN_FLAG_HANDLERS=(
-  [ctx]=handle_run_ctx
-  [dry_run]=handle_run_dry_run
-  [verbosity]=handle_flag_verbosity
-  [help]=handle_flag_help
-)
+declare -A GLOBAL_FLAG_HANDLERS
+GLOBAL_FLAG_HANDLERS[verbosity]=handle_flag_verbosity
+GLOBAL_FLAG_HANDLERS[version]=handle_flag_version
+GLOBAL_FLAG_HANDLERS[help]=handle_flag_help
+
+declare -A RUN_FLAG_HANDLERS
+RUN_FLAG_HANDLERS[ctx]=handle_run_ctx
+RUN_FLAG_HANDLERS[dry_run]=handle_run_dry_run
+RUN_FLAG_HANDLERS[verbosity]=handle_flag_verbosity
+RUN_FLAG_HANDLERS[help]=handle_flag_help
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 print_help() {
   local spec=$1
-
   jq -r '
     .help.usage[],
     "",
@@ -28,119 +29,99 @@ print_help() {
 }
 
 cli_flag_value() {
-  local spec=$1
-  local flag=$2
-  local field=$3
-
-  jq -er --arg flag "$flag" --arg field "$field" '.flags[$flag][$field]' "$spec"
+  jq -r --arg flag "$2" --arg field "$3" '.flags[$flag][$field] // empty' "$1"
 }
 
-args_drop() {
-  local count=$1
-  local -n args=$2
+# ── Routing ───────────────────────────────────────────────────────────────────
 
-  args=("${args[@]:count}")
-}
-
+# Consumes leading flag tokens from the args array, dispatching each to its
+# handler. Stops at the first token that isn't in the spec and returns 0.
 route_flags() {
-  local -n route_rt=$1
-  local -n route_args=$2
-  local -n handlers=$3
-  local -n route_opts=$4
+  local -n _rf_args=$1
+  local -n _rf_handlers=$2
+  local -n _rf_opts=$3
+  local -n rt=$SHBANG_RT_NAME
 
-  while ((${#route_args[@]} > 0)); do
-    local token=${route_args[0]}
-    local kind=
-    local handler=
+  while ((${#_rf_args[@]} > 0)); do
+    local token=${_rf_args[0]}
+    local kind handler
 
-    kind=$(cli_flag_value "${route_rt[cli_spec]}" "$token" kind 2>/dev/null || true)
+    kind=$(cli_flag_value "${rt[cli_spec]}" "$token" kind)
     [[ -n $kind ]] || return 0
 
-    handler=${handlers[$kind]:-}
+    handler=${_rf_handlers[$kind]:-}
     [[ -n $handler ]] || die "unsupported flag: $token"
 
-    "$handler" route_rt route_args route_opts
+    "$handler" _rf_args _rf_opts
   done
 }
 
 route_cli() {
-  local -n rt=$1
-  shift
-
+  local -n rt=$SHBANG_RT_NAME
   local -a args=("$@")
   local -A opts=()
 
-  route_flags rt args GLOBAL_FLAG_HANDLERS opts
+  route_flags args GLOBAL_FLAG_HANDLERS opts
 
   local command=${args[0]:-}
   [[ -n $command ]] || die "missing command"
-  args_drop 1 args
+  args=("${args[@]:1}")
 
   local handler=${SHBANG_COMMANDS[$command]:-}
   [[ -n $handler ]] || die "unknown command: $command"
 
-  "$handler" rt "${args[@]}"
+  "$handler" "${args[@]}"
 }
 
 parse_run_args() {
-  local -n run_rt=$1
-  local -n out=$2
-  shift 2
+  local -n _pra_args=$1
+  local -n _pra_out=$2
 
-  local -a args=("$@")
-  out=()
+  [[ ${#_pra_args[@]} -gt 0 ]] || die "missing playbook"
+  _pra_out[playbook]=${_pra_args[0]}
+  _pra_args=("${_pra_args[@]:1}")
 
-  [[ ${#args[@]} -gt 0 ]] || die "missing playbook"
-  out[playbook]=${args[0]}
-  args_drop 1 args
+  route_flags _pra_args RUN_FLAG_HANDLERS _pra_out
+  [[ ${#_pra_args[@]} -eq 0 ]] || die "unknown arg: ${_pra_args[0]}"
 
-  route_flags run_rt args RUN_FLAG_HANDLERS out
-  [[ ${#args[@]} -eq 0 ]] || die "unknown arg: ${args[0]}"
-
-  [[ -f ${out[playbook]} ]] || die "playbook not found: ${out[playbook]}"
-  [[ -n ${out[ctx]:-} ]] || die "missing --ctx"
-  [[ -f ${out[ctx]} ]] || die "context not found: ${out[ctx]}"
+  [[ -f ${_pra_out[playbook]} ]] || die "playbook not found: ${_pra_out[playbook]}"
+  [[ -n ${_pra_out[ctx]:-}    ]] || die "missing --ctx"
+  [[ -f ${_pra_out[ctx]}      ]] || die "context not found: ${_pra_out[ctx]}"
 }
 
+# ── Flag handlers ─────────────────────────────────────────────────────────────
+
 handle_flag_verbosity() {
-  local -n flag_rt=$1
-  local -n flag_args=$2
-  local token=${flag_args[0]}
-
-  flag_rt[verbosity]=$(cli_flag_value "${flag_rt[cli_spec]}" "$token" level)
-  log_set_verbosity "${flag_rt[verbosity]}"
-
-  args_drop 1 flag_args
+  local -n _hv_args=$1
+  local -n rt=$SHBANG_RT_NAME
+  local token=${_hv_args[0]}
+  rt[verbosity]=$(cli_flag_value "${rt[cli_spec]}" "$token" level)
+  _hv_args=("${_hv_args[@]:1}")
 }
 
 handle_flag_version() {
-  local -n flag_rt=$1
-
-  printf '%s\n' "${flag_rt[version]}"
+  local -n rt=$SHBANG_RT_NAME
+  printf '%s\n' "${rt[version]}"
   exit 0
 }
 
 handle_flag_help() {
-  local -n flag_rt=$1
-
-  print_help "${flag_rt[cli_spec]}"
+  local -n rt=$SHBANG_RT_NAME
+  print_help "${rt[cli_spec]}"
   exit 0
 }
 
 handle_run_ctx() {
-  local -n ctx_args=$2
-  local -n ctx_opts=$3
-
-  ctx_opts[ctx]=${ctx_args[1]:-}
-  [[ -n ${ctx_opts[ctx]} ]] || die "missing value for --ctx"
-
-  args_drop 2 ctx_args
+  local -n _ctx_args=$1
+  local -n _ctx_opts=$2
+  _ctx_opts[ctx]=${_ctx_args[1]:-}
+  [[ -n ${_ctx_opts[ctx]} ]] || die "missing value for --ctx"
+  _ctx_args=("${_ctx_args[@]:2}")
 }
 
 handle_run_dry_run() {
-  local -n dry_rt=$1
-  local -n dry_args=$2
-
-  dry_rt[dry_run]=true
-  args_drop 1 dry_args
+  local -n _hrd_args=$1
+  local -n rt=$SHBANG_RT_NAME
+  rt[dry_run]=true
+  _hrd_args=("${_hrd_args[@]:1}")
 }

@@ -1,0 +1,7 @@
+{
+  "dirs": [
+    { "name": "sh.bang",  "path": "/Users/gregb/devhobme/sh.bang" },
+    { "name": "devnotes", "path": "/Users/gregb/devnotes" },
+    { "name": "claude",   "path": "/Users/gregb/.claude/tmp" }
+  ]
+}

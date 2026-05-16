@@ -3,6 +3,12 @@
 Date: 2026-05-16
 
 ## Current State
+i
+- greg notes. we need to mke it required that each step has a name a Step has a name. 
+For example in our own shebmang
+#!  Step: "Deploy jar to shards"
+and each step is. aequnce of events ssh->[*]
+        |cd-> 
 
 Project path:
 

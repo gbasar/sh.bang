@@ -19,8 +19,8 @@ Examples:
 
 ```txt
 for_each ${topology.shards[*]}
-| @${host}:${install.dir}/datadir/archive send ${resources.replayJar}
-| #${host}:${install.dir}/datadir/archive run ${java} -jar replay.jar
+| @${host}:${install.dir}/datadir/archive send ${resources.replayJar}    //ssh into and run
+| #${host}:${install.dir}/datadir/archive run ${java} -jar replay.jar    //ssh bashh -c "send the command"
 ```
 
 Selectors planned for v1:

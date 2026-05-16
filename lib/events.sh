@@ -1,115 +1,129 @@
 #!/usr/bin/env bash
 
-declare -A EVENT_HANDLERS=(
-  [console]=event_console
-  [file]=event_file
-)
+# ── Handler registries ────────────────────────────────────────────────────────
 
-declare -A CONSOLE_EVENT_FORMATTERS=(
-  [run.loaded]=console_run_loaded
-  [parser.for_each]=console_parser_for_each
-  [parser.pipe]=console_parser_pipe
-)
+declare -A EVENT_HANDLERS
+EVENT_HANDLERS[console]=event_console
+EVENT_HANDLERS[file]=event_file
 
-emit() {
-  local -n rt=$1
-  local -n event=$2
-  local -a handlers
+# Which handlers are active. Add/remove keys to change routing at runtime.
+declare -gA ACTIVE_EVENT_HANDLERS
+ACTIVE_EVENT_HANDLERS[console]=1
+
+declare -A CONSOLE_EVENT_FORMATTERS
+CONSOLE_EVENT_FORMATTERS[run.loaded]=console_run_loaded
+CONSOLE_EVENT_FORMATTERS[parser.for_each]=console_parser_for_each
+CONSOLE_EVENT_FORMATTERS[parser.pipe]=console_parser_pipe
+CONSOLE_EVENT_FORMATTERS[exec.for_each]=console_default
+CONSOLE_EVENT_FORMATTERS[exec.pipe]=console_default
+CONSOLE_EVENT_FORMATTERS[log.info]=console_log
+CONSOLE_EVENT_FORMATTERS[log.debug]=console_log
+CONSOLE_EVENT_FORMATTERS[log.trace]=console_log
+CONSOLE_EVENT_FORMATTERS[log.wire]=console_log
+CONSOLE_EVENT_FORMATTERS[log.error]=console_log
+
+# Minimum verbosity level required to print each log type.
+declare -A LOG_VERBOSITY_THRESHOLDS
+LOG_VERBOSITY_THRESHOLDS[log.info]=1
+LOG_VERBOSITY_THRESHOLDS[log.debug]=2
+LOG_VERBOSITY_THRESHOLDS[log.trace]=3
+LOG_VERBOSITY_THRESHOLDS[log.wire]=4
+LOG_VERBOSITY_THRESHOLDS[log.error]=0
+
+# ── Emission ──────────────────────────────────────────────────────────────────
+
+# Internal: build and dispatch an event with an explicit source location.
+# Called by emit_kv and log wrappers — never call directly from application code.
+_emit_raw() {
+  local type=$1 src=$2
+  local -A __evt
+  __evt[type]=$type
+  __evt[_src]=$src
+
+  local -a kv=("${@:3}")
+  local i
+  for (( i=0; i<${#kv[@]}; i+=2 )); do
+    __evt[${kv[i]}]=${kv[i+1]:-}
+  done
+
   local name
-
-  read -r -a handlers <<< "${rt[event_handlers]}"
-
-  for name in "${handlers[@]}"; do
+  for name in "${!ACTIVE_EVENT_HANDLERS[@]}"; do
     local fn=${EVENT_HANDLERS[$name]:-}
     [[ -n $fn ]] || die "unknown event handler: $name"
-    "$fn" rt event
+    "$fn" __evt
   done
 }
 
-# what the fuck is shift agian? 
+# Public: emit a typed event. Source location auto-injected from caller's frame.
+# Usage: emit_kv type [key value ...]
 emit_kv() {
-  local -n rt=$1
-  local type=$2
-  shift 2
-
-  local -A event=([type]="$type")
-
-  while (($# > 0)); do
-    local key=$1
-    local value=${2:-}
-    event[$key]=$value
-    shift 2
-  done
-
-  emit rt event
+  _emit_raw "$1" "${BASH_SOURCE[1]}:${BASH_LINENO[0]}" "${@:2}"
 }
+
+# ── Console handler ───────────────────────────────────────────────────────────
 
 event_console() {
-  local -n rt=$1
-  local -n event=$2
-  local type=${event[type]}
-  local formatter=${CONSOLE_EVENT_FORMATTERS[$type]:-console_default}
-
-  "$formatter" rt event
+  local -n _con_ev=$1
+  local formatter=${CONSOLE_EVENT_FORMATTERS[${_con_ev[type]}]:-console_default}
+  "$formatter" "$1"
 }
 
 console_run_loaded() {
-  local -n rt=$1
-  local -n event=$2
-
-  log_info "playbook: ${event[playbook]}"
-  log_info "context: ${event[ctx]}"
-  log_info "dry-run: ${rt[dry_run]}"
+  local -n _ev=$1
+  local -n rt=$SHBANG_RT_NAME
+  (( rt[verbosity] >= 1 )) || return 0
+  printf '[sh.bang:info] playbook: %s\n' "${_ev[playbook]}" >&2
+  printf '[sh.bang:info] context: %s\n'  "${_ev[ctx]}"      >&2
+  printf '[sh.bang:info] dry-run: %s\n'  "${rt[dry_run]}"   >&2
 }
 
 console_parser_for_each() {
-  local -n event=$2
-
-  printf '[for_each] %s\n' "${event[selector]}"
+  local -n _ev=$1
+  printf '[for_each] %s\n' "${_ev[selector]}"
 }
 
 console_parser_pipe() {
-  local -n event=$2
-
+  local -n _ev=$1
   printf '[pipe] subject=%s verb=%s args=%s\n' \
-    "${event[subject]}" \
-    "${event[verb]}" \
-    "${event[args]}"
+    "${_ev[subject]}" "${_ev[verb]}" "${_ev[args]}"
+}
+
+console_log() {
+  local -n _ev=$1
+  local -n rt=$SHBANG_RT_NAME
+  local threshold=${LOG_VERBOSITY_THRESHOLDS[${_ev[type]}]:-0}
+  (( rt[verbosity] >= threshold )) || return 0
+  printf '[sh.bang:%s] %s\n' "${_ev[type]#log.}" "${_ev[message]:-}" >&2
 }
 
 console_default() {
-  local -n event=$2
-
-  log_debug "event ${event[type]}"
+  local -n _ev=$1
+  local -n rt=$SHBANG_RT_NAME
+  (( rt[verbosity] >= 2 )) || return 0
+  printf '[sh.bang:debug] event %s\n' "${_ev[type]}" >&2
 }
+
+# ── File handler ──────────────────────────────────────────────────────────────
 
 event_file() {
-  local -n rt=$1
-  local -n event=$2
-
-  [[ -n ${rt[event_file]:-} ]] || return 0
-
-  event_to_json event >> "${rt[event_file]}"
+  local -n _ef_rt=$SHBANG_RT_NAME
+  [[ -n ${_ef_rt[event_file]:-} ]] || return 0
+  event_to_json "$1" >> "${_ef_rt[event_file]}"
 }
 
-# can jq really not do this?
+# ── Serialization ─────────────────────────────────────────────────────────────
+
 event_to_json() {
-  local -n event=$1
-  local -a jq_args=()
-  local filter='{'
-  local key
-  local first=true
-
-  for key in "${!event[@]}"; do
-    jq_args+=(--arg "$key" "${event[$key]}")
-    if [[ $first == true ]]; then
-      first=false
-    else
-      filter+=','
-    fi
-    filter+="\"$key\":\$$key"
+  local -n _e2j=$1
+  local out='{' sep='' key val
+  for key in "${!_e2j[@]}"; do
+    val=${_e2j[$key]}
+    val=${val//\\/\\\\}
+    val=${val//'"'/\\\"}
+    val=${val//$'\n'/\\n}
+    val=${val//$'\t'/\\t}
+    out+="${sep}\"${key}\":\"${val}\""
+    sep=','
   done
-
-  filter+='}'
-  jq -cn "${jq_args[@]}" "$filter"
+  printf '%s}\n' "$out"
 }

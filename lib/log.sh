@@ -1,38 +1,15 @@
 #!/usr/bin/env bash
 
-SHBANG_VERBOSITY=0
+# Log functions emit structured events through the event system.
+# BASH_SOURCE[1]:BASH_LINENO[0] captures the caller's location, not this file.
 
-log_set_verbosity() {
-  local level=$1
-  SHBANG_VERBOSITY=$level
-}
+log_info()  { _emit_raw log.info  "${BASH_SOURCE[1]}:${BASH_LINENO[0]}" message "$*"; }
+log_debug() { _emit_raw log.debug "${BASH_SOURCE[1]}:${BASH_LINENO[0]}" message "$*"; }
+log_trace() { _emit_raw log.trace "${BASH_SOURCE[1]}:${BASH_LINENO[0]}" message "$*"; }
+log_wire()  { _emit_raw log.wire  "${BASH_SOURCE[1]}:${BASH_LINENO[0]}" message "$*"; }
 
-log_at() {
-  local required=$1
-  local label=$2
-  shift 2
-
-  if (( SHBANG_VERBOSITY >= required )); then
-    printf '[sh.bang:%s] %s\n' "$label" "$*" >&2
-  fi
-}
-
-log_info() {
-  log_at 1 info "$@"
-}
-
-log_debug() {
-  log_at 2 debug "$@"
-}
-
-log_trace() {
-  log_at 3 trace "$@"
-}
-
-log_wire() {
-  log_at 4 wire "$@"
-}
-
+# die bypasses the event system — direct stderr only — to avoid any risk of
+# recursion if the event system itself is broken.
 die() {
   printf '[sh.bang:error] %s\n' "$*" >&2
   exit 1
