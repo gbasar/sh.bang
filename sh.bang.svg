@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 135" width="340" height="135">
+
+  <!-- terminal black -->
+  <rect width="340" height="135" fill="#0a0a0a"/>
+
+  <!-- comic censor burst — 12-spike starburst, yellow on black -->
+  <polygon
+    points="
+      72,15  79.8,36  97,22   93.2,43.8
+      115,40  100.9,57.2  122,65  100.9,72.8
+      115,90  93.2,86.2   97,108  79.8,94
+      72,115  64.2,94    47,108  50.8,86.2
+      29,90   43.1,72.8   22,65   43.1,57.2
+      29,40   50.8,43.8   47,22   64.2,36
+    "
+    fill="#FFD700" stroke="#0a0a0a" stroke-width="1"/>
+
+  <!-- #! — blacked out, like the word is being censored -->
+  <text x="72" y="65"
+    text-anchor="middle" dominant-baseline="central"
+    font-family="'Courier New', Courier, monospace"
+    font-weight="900" font-size="36"
+    fill="#0a0a0a">#!</text>
+
+  <!-- brand -->
+  <text x="148" y="52"
+    font-family="'Courier New', Courier, monospace"
+    font-weight="700" font-size="32"
+    fill="#33ff33">sh.bang</text>
+
+  <!-- tagline -->
+  <text x="148" y="76"
+    font-family="'Courier New', Courier, monospace"
+    font-size="12" fill="#1a7a1a">runbook runner</text>
+
+  <!-- cursor + prompt -->
+  <rect x="148" y="92" width="9" height="16" rx="1" fill="#33ff33" opacity="0.85"/>
+  <text x="162" y="105"
+    font-family="'Courier New', Courier, monospace"
+    font-size="11" fill="#0d4d0d">run playbook.shbang --ctx prod.json</text>
+
+</svg>
