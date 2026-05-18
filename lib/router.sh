@@ -35,41 +35,37 @@ cli_flag_value() {
   jq -er --arg flag "$flag" --arg field "$field" '.flags[$flag][$field] // empty' "$spec"
 }
 
-
 args_drop() {
   local count=$1
   local -n _arr=$2
   _arr=("${_arr[@]:count}")
 }
+
 route_flags() {
-  local -n route_rt=$1
-  local -n route_args=$2
-  local -n handlers=$3
-  local -n route_opts=$4
+  local -n route_args=$1
+  local -n handlers=$2
+  local -n route_opts=$3
 
   while ((${#route_args[@]} > 0)); do
     local token=${route_args[0]}
     local kind=
     local handler=
 
-    kind=$(cli_flag_value "${route_rt[cli_spec]}" "$token" kind 2>/dev/null || true)
+    kind=$(cli_flag_value "${SHBANG_RT[cli_spec]}" "$token" kind 2>/dev/null || true)
     [[ -n $kind ]] || return 0
 
     handler=${handlers[$kind]:-}
     [[ -n $handler ]] || die "unsupported flag: $token"
 
-    "$handler" route_rt route_args route_opts
+    "$handler" route_args route_opts
   done
 }
 
 route_cli() {
-  local -n rt=$1
-  shift
-
   local -a args=("$@")
   local -A opts=()
 
-  route_flags rt args GLOBAL_FLAG_HANDLERS opts
+  route_flags args GLOBAL_FLAG_HANDLERS opts
 
   local command=${args[0]:-}
   [[ -n $command ]] || die "missing command"
@@ -78,13 +74,12 @@ route_cli() {
   local handler=${SHBANG_COMMANDS[$command]:-}
   [[ -n $handler ]] || die "unknown command: $command"
 
-  "$handler" rt "${args[@]}"
+  "$handler" "${args[@]}"
 }
 
 parse_run_args() {
-  local -n parse_rt=$1
-  local -n out=$2
-  shift 2
+  local -n out=$1
+  shift
 
   local -a args=("$@")
   out=()
@@ -93,7 +88,7 @@ parse_run_args() {
   out[playbook]=${args[0]}
   args_drop 1 args
 
-  route_flags parse_rt args RUN_FLAG_HANDLERS out
+  route_flags args RUN_FLAG_HANDLERS out
   [[ ${#args[@]} -eq 0 ]] || die "unknown arg: ${args[0]}"
 
   [[ -f ${out[playbook]} ]] || die "playbook not found: ${out[playbook]}"
@@ -102,33 +97,28 @@ parse_run_args() {
 }
 
 handle_flag_verbosity() {
-  local -n flag_rt=$1
-  local -n flag_args=$2
+  local -n flag_args=$1
   local token=${flag_args[0]}
 
-  flag_rt[verbosity]=$(cli_flag_value "${flag_rt[cli_spec]}" "$token" level)
-  log_set_verbosity "${flag_rt[verbosity]}"
+  SHBANG_RT[verbosity]=$(cli_flag_value "${SHBANG_RT[cli_spec]}" "$token" level)
+  log_set_verbosity "${SHBANG_RT[verbosity]}"
 
   args_drop 1 flag_args
 }
 
 handle_flag_version() {
-  local -n flag_rt=$1
-
-  printf '%s\n' "${flag_rt[version]}"
+  printf '%s\n' "${SHBANG_RT[version]}"
   exit 0
 }
 
 handle_flag_help() {
-  local -n flag_rt=$1
-
-  print_help "${flag_rt[cli_spec]}"
+  print_help "${SHBANG_RT[cli_spec]}"
   exit 0
 }
 
 handle_run_ctx() {
-  local -n ctx_args=$2
-  local -n ctx_opts=$3
+  local -n ctx_args=$1
+  local -n ctx_opts=$2
 
   ctx_opts[ctx]=${ctx_args[1]:-}
   [[ -n ${ctx_opts[ctx]} ]] || die "missing value for --ctx"
@@ -137,9 +127,8 @@ handle_run_ctx() {
 }
 
 handle_run_dry_run() {
-  local -n dry_rt=$1
-  local -n dry_args=$2
+  local -n dry_args=$1
 
-  dry_rt[dry_run]=true
+  SHBANG_RT[dry_run]=true
   args_drop 1 dry_args
 }
