@@ -1,0 +1,14 @@
+{
+  "cluster": {
+    "nodes": {
+      "primary": {
+        "host": "db01.prod.internal",
+        "deploy": { "dir": "/opt/app" },
+        "java": "/usr/bin/java"
+      }
+    }
+  },
+  "resources": {
+    "package": "/tmp/deploy/app.tar.gz"
+  }
+}

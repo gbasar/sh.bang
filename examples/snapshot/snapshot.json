@@ -1,0 +1,17 @@
+{
+  "resources": {
+    "localBackupDir": "/mnt/backups/shards"
+  },
+  "topology": {
+    "shards": {
+      "shard3": {
+        "host": "app03.prod.internal",
+        "shard": { "id": "shard3" },
+        "install": { "dir": "/opt/blackbird" },
+        "data": { "dir": "/opt/blackbird/data" },
+        "backup": { "dir": "/opt/blackbird/snapshots" },
+        "java": "/usr/bin/java"
+      }
+    }
+  }
+}

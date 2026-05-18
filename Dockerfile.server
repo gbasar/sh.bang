@@ -1,0 +1,16 @@
+# Server: remote execution target — accepts SSH, runs deployed JARs
+FROM redhat/ubi9
+
+RUN dnf install -y java-17-openjdk-headless openssh-server && dnf clean all
+
+# App user and directory structure matching examples
+RUN useradd -m -s /bin/bash deploy && \
+    mkdir -p /opt/blackbird/{data,snapshots,ssl,service/versions} && \
+    chown -R deploy:deploy /opt/blackbird
+
+# SSH host keys
+RUN ssh-keygen -A
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D", "-e"]

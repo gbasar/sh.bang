@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+printf '[docker-test] building image...\n'
+docker build -t sh.bang:test "$ROOT"
+
+printf '[docker-test] running tests inside container...\n'
+docker run --rm --entrypoint bash sh.bang:test tests/run-tests

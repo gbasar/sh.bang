@@ -1,0 +1,6 @@
+// Cold snapshot of shard3: quiesce, tar data dir, pull archive locally, then unquiesce
+for_each ${topology.shards[shard3]}
+| #${host}:${install.dir} run ${java} -jar quiesce.jar --shard ${shard.id} --timeout 30
+| #${host}:${data.dir}    run tar -czf ${backup.dir}/${shard.id}-snapshot.tgz .
+| @${host}:${backup.dir}/${shard.id}-snapshot.tgz fetch ${resources.localBackupDir}
+| #${host}:${install.dir} run ${java} -jar unquiesce.jar --shard ${shard.id}

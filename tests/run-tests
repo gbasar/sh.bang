@@ -80,7 +80,7 @@ assert_stderr "invalid syntax msg" "cannot parse line 2" \
 
 section "parser — replay"
 
-_replay=$("$BIN" run "$EX/replay.shbang" --ctx "$EX/context.json" --dry-run)
+_replay=$("$BIN" run "$EX/replay/replay.shbang" --ctx "$EX/replay/context.json" --dry-run)
 assert_contains "for_each selector"  "$_replay" "[for_each] topology.shards[shard3]"
 assert_contains "@ subject (scp)"    "$_replay" 'subject=@${host}:'
 assert_contains "# subject (ssh)"    "$_replay" 'subject=#${host}:'
@@ -91,7 +91,7 @@ assert_contains "run pipe"           "$_replay" 'verb=run args=${java} -jar repl
 
 section "parser — canary-deploy"
 
-_canary=$("$BIN" run "$EX/canary-deploy.shbang" --ctx "$EX/canary-deploy.json" --dry-run)
+_canary=$("$BIN" run "$EX/canary-deploy/canary-deploy.shbang" --ctx "$EX/canary-deploy/canary-deploy.json" --dry-run)
 assert_contains "for_each"           "$_canary" "[for_each] topology.shards[shard3]"
 assert_contains "send jar"           "$_canary" "verb=send"
 assert_contains "deploy step"        "$_canary" "deploy.jar"
@@ -103,7 +103,7 @@ assert_contains "smoke host arg"     "$_canary" '--host ${host}'
 
 section "parser — snapshot"
 
-_snap=$("$BIN" run "$EX/snapshot.shbang" --ctx "$EX/snapshot.json" --dry-run)
+_snap=$("$BIN" run "$EX/snapshot/snapshot.shbang" --ctx "$EX/snapshot/snapshot.json" --dry-run)
 assert_contains "for_each"           "$_snap" "[for_each] topology.shards[shard3]"
 assert_contains "# subject: ssh"     "$_snap" 'subject=#${host}:'
 assert_contains "@ subject: fetch"   "$_snap" 'subject=@${host}:'
@@ -116,7 +116,7 @@ assert_contains "unquiesce step"     "$_snap" "unquiesce.jar"
 
 section "parser — cert-rotate"
 
-_cert=$("$BIN" run "$EX/cert-rotate.shbang" --ctx "$EX/cert-rotate.json" --dry-run)
+_cert=$("$BIN" run "$EX/cert-rotate/cert-rotate.shbang" --ctx "$EX/cert-rotate/cert-rotate.json" --dry-run)
 assert_contains "for_each wildcard"   "$_cert" "[for_each] topology.shards[*]"
 assert_contains "@ subject: send"     "$_cert" 'subject=@${host}:'
 assert_contains "# subject: run"      "$_cert" 'subject=#${host}:'
@@ -142,12 +142,12 @@ assert_contains "multi-block: run pipe"   "$_multi" "verb=run"
 
 section "verbosity levels"
 
-_v0=$("$BIN"       run "$EX/replay.shbang" --ctx "$EX/context.json" --dry-run 2>&1)
-_v1=$("$BIN" -v    run "$EX/replay.shbang" --ctx "$EX/context.json" --dry-run 2>&1)
-_v2=$("$BIN" -vv   run "$EX/replay.shbang" --ctx "$EX/context.json" --dry-run 2>&1)
-_v3=$("$BIN" -vvv  run "$EX/replay.shbang" --ctx "$EX/context.json" --dry-run 2>&1)
-_v4=$("$BIN" -vvvv run "$EX/replay.shbang" --ctx "$EX/context.json" --dry-run 2>&1)
-_vl=$("$BIN" --verbose run "$EX/replay.shbang" --ctx "$EX/context.json" --dry-run 2>&1)
+_v0=$("$BIN"       run "$EX/replay/replay.shbang" --ctx "$EX/replay/context.json" --dry-run 2>&1)
+_v1=$("$BIN" -v    run "$EX/replay/replay.shbang" --ctx "$EX/replay/context.json" --dry-run 2>&1)
+_v2=$("$BIN" -vv   run "$EX/replay/replay.shbang" --ctx "$EX/replay/context.json" --dry-run 2>&1)
+_v3=$("$BIN" -vvv  run "$EX/replay/replay.shbang" --ctx "$EX/replay/context.json" --dry-run 2>&1)
+_v4=$("$BIN" -vvvv run "$EX/replay/replay.shbang" --ctx "$EX/replay/context.json" --dry-run 2>&1)
+_vl=$("$BIN" --verbose run "$EX/replay/replay.shbang" --ctx "$EX/replay/context.json" --dry-run 2>&1)
 
 assert_not_contains "default: no log lines"  "$_v0" "[sh.bang:"
 assert_contains     "-v: info present"       "$_v1" "[sh.bang:info]"
@@ -164,7 +164,7 @@ assert_not_contains "--verbose = -v: no debug" "$_vl" "[sh.bang:debug]"
 
 section "execution — dry-run renders variables"
 
-_dr=$("$BIN" run "$EX/cert-rotate.shbang" --ctx "$EX/cert-rotate.json" --dry-run 2>&1)
+_dr=$("$BIN" run "$EX/cert-rotate/cert-rotate.shbang" --ctx "$EX/cert-rotate/cert-rotate.json" --dry-run 2>&1)
 assert_contains     "cmd:scp lines"      "$_dr" "[cmd:scp]"
 assert_contains     "cmd:ssh lines"      "$_dr" "[cmd:ssh]"
 _dr_cmd=$(grep '^\[cmd:' <<< "$_dr" || true)
@@ -176,8 +176,8 @@ assert_contains     "real hostname"      "$_dr" ".prod.internal"
 section "execution — HOCON context"
 
 if [[ -f ${HOCON_JAR:-/usr/local/lib/hocon.jar} ]]; then
-  _hdr=$("$BIN" run "$EX/cert-rotate.shbang" \
-         --ctx "$EX/cert-rotate.hocon" --dry-run 2>&1)
+  _hdr=$("$BIN" run "$EX/cert-rotate/cert-rotate.shbang" \
+         --ctx "$EX/cert-rotate/cert-rotate.hocon" --dry-run 2>&1)
   assert_contains     "hocon: cmd:scp"       "$_hdr" "[cmd:scp]"
   assert_contains     "hocon: real hostname" "$_hdr" ".prod.internal"
   assert_not_contains "hocon: no vars"       "$_hdr" '${host}'

@@ -35,13 +35,12 @@ cli_flag_value() {
   jq -er --arg flag "$flag" --arg field "$field" '.flags[$flag][$field] // empty' "$spec"
 }
 
+
 args_drop() {
   local count=$1
-  local -n drop_args=$2
-
-  drop_args=("${drop_args[@]:count}")
+  local -n _arr=$2
+  _arr=("${_arr[@]:count}")
 }
-
 route_flags() {
   local -n route_rt=$1
   local -n route_args=$2
