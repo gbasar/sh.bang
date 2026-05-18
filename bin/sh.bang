@@ -9,6 +9,9 @@ source "$SHBANG_HOME/lib/log.sh"
 source "$SHBANG_HOME/lib/events.sh"
 source "$SHBANG_HOME/lib/parser.sh"
 source "$SHBANG_HOME/lib/router.sh"
+source "$SHBANG_HOME/lib/expand.sh"
+source "$SHBANG_HOME/lib/dispatch.sh"
+source "$SHBANG_HOME/lib/hocon.sh"
 
 declare -A SHBANG_COMMANDS=(
   [run]=cmd_run
@@ -29,24 +32,34 @@ runtime_init() {
     [version]="$SHBANG_VERSION"
     [home]="$SHBANG_HOME"
     [cli_spec]="$SHBANG_CLI_SPEC"
-    [event_handlers]="console"
+    [event_handlers]="console expand dispatch"
     [event_file]=""
   )
 }
 
 cmd_run() {
-  local -n rt=$1
+  local -n run_rt=$1
   shift
 
   local -A opts
-  parse_run_args rt opts "$@"
+  parse_run_args run_rt opts "$@"
 
-  emit_kv rt run.loaded \
+  local ctx_json _ctx_tmp=
+  ctx_json=$(resolve_ctx "${opts[ctx]}")
+  [[ $ctx_json != "${opts[ctx]}" ]] && _ctx_tmp=$ctx_json
+
+  run_rt[ctx]="$ctx_json"
+  _CMD_QUEUE=()
+
+  emit_kv run_rt run.loaded \
     playbook "${opts[playbook]}" \
     ctx "${opts[ctx]}"
 
   log_debug "bash: ${BASH_VERSION}"
-  parse_playbook rt "${opts[playbook]}"
+  parse_playbook run_rt "${opts[playbook]}"
+  dispatch_queue run_rt
+
+  if [[ -n $_ctx_tmp ]]; then rm -f "$_ctx_tmp"; fi
 }
 
 main "$@"

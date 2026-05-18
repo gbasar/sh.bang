@@ -1,0 +1,2 @@
+for_each ${cluster.nodes[primary]}
+not a valid line

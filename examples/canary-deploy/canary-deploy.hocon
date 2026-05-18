@@ -1,0 +1,23 @@
+# Canary deploy configuration
+# Converted to JSON before sh.bang processes it
+
+release {
+  version = "3.7.1"
+  build   = "20260518-1134"
+}
+
+resources {
+  serviceJar = /tmp/deploy/service-3.7.1.jar
+}
+
+topology {
+  shards {
+    shard3 {
+      host            = app03.prod.internal
+      shard.id        = shard3
+      install.dir     = /opt/blackbird
+      java            = /usr/bin/java
+      service.port    = 8443
+    }
+  }
+}

@@ -1,0 +1,7 @@
+// first block: push the package
+for_each ${cluster.nodes[primary]}
+| @${host}:${deploy.dir} send ${resources.package}
+
+// second block: run the installer
+for_each ${cluster.nodes[primary]}
+| #${host}:${deploy.dir} run ${java} -jar install.jar

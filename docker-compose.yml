@@ -1,0 +1,23 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    hostname: app03.prod.internal
+
+  test:
+    build:
+      context: .
+      args:
+        HOCON_JAR_URL: ${HOCON_JAR_URL:-}
+    entrypoint: bash
+    command: tests/run-tests
+    depends_on: [server]
+
+  run:
+    build:
+      context: .
+      args:
+        HOCON_JAR_URL: ${HOCON_JAR_URL:-}
+    command: run examples/replay/replay.shbang --ctx examples/replay/context.json
+    depends_on: [server]

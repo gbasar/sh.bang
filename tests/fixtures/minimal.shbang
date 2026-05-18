@@ -1,0 +1,3 @@
+for_each ${cluster.nodes[primary]}
+| @${host}:${deploy.dir} send ${resources.package}
+| #${host}:${deploy.dir} run ${java} -jar install.jar
