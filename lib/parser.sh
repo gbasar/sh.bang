@@ -33,13 +33,13 @@ parse_pipe_line() {
 }
 
 parse_playbook() {
-  local -n pp_rt=$1
-  local playbook=$2
+  local playbook=$1
   local line
   local line_no=0
   local -A node
 
   while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%$'\r'}
     (( line_no += 1 ))
     log_trace "line $line_no: $line"
 
@@ -48,14 +48,14 @@ parse_playbook() {
 
     if parse_for_each_line "$line" node; then
       log_debug "parsed for_each selector=${node[selector]}"
-      emit_kv pp_rt parser.for_each selector "${node[selector]}"
+      emit_kv parser.for_each selector "${node[selector]}"
       continue
     fi
 
     if parse_pipe_line "$line" node; then
       log_debug "parsed pipe subject=${node[subject]} verb=${node[verb]}"
       log_wire "pipe args=${node[args]}"
-      emit_kv pp_rt parser.pipe \
+      emit_kv parser.pipe \
         subject "${node[subject]}" \
         verb "${node[verb]}" \
         args "${node[args]}"

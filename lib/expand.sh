@@ -32,25 +32,23 @@ render_vars() {
 # ---------- expand listener ----------
 
 event_expand() {
-  local -n ex_rt=$1
-  local -n ex_event=$2
+  local -n ex_event=$1
   local type=${ex_event[type]}
 
   case $type in
     parser.for_each)
-      ex_rt[_expand_selector]=${ex_event[selector]}
+      SHBANG_RT[_expand_selector]=${ex_event[selector]}
       ;;
     parser.pipe)
-      expand_pipe ex_rt ex_event
+      expand_pipe ex_event
       ;;
   esac
 }
 
 expand_pipe() {
-  local -n ep_rt=$1
-  local -n ep_event=$2
+  local -n ep_event=$1
 
-  local selector=${ep_rt[_expand_selector]:-}
+  local selector=${SHBANG_RT[_expand_selector]:-}
   [[ -n $selector ]] || return 0
 
   local jq_path
@@ -88,5 +86,5 @@ expand_pipe() {
       --arg args    "$args"     \
       '{type:$type,user:$user,host:$host,path:$path,verb:$verb,args:$args}')")
 
-  done < <(jq -c "$jq_path" "${ep_rt[ctx]}")
+  done < <(jq -c "$jq_path" "${SHBANG_RT[ctx]}")
 }

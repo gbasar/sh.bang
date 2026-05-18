@@ -19,41 +19,53 @@ _ssh_opts() {
     " -o ControlPersist=30s"
 }
 
-# Registered in EVENT_HANDLERS; skips events not in CMD_DISPATCH and dry-runs.
+# Registered in EVENT_HANDLERS; skips events not in CMD_DISPATCH.
+# On dry-run: prints a labelled line from verbs.json instead of executing.
 event_dispatch() {
-  local -n ed_rt=$1
-  local -n ed_event=$2
+  local -n ed_event=$1
   local type=${ed_event[type]}
   local fn=${CMD_DISPATCH[$type]:-}
-  [[ -n $fn ]]                    || return 0
-  [[ ${ed_rt[dry_run]} == true ]] && return 0
-  "$fn" ed_rt ed_event
+  [[ -n $fn ]] || return 0
+
+  if [[ ${SHBANG_RT[dry_run]} == true ]]; then
+    local verb=${ed_event[verb]}
+    local label
+    label=$(jq -r --arg v "$verb" \
+      '.verbs[$v].dry_run // "(unknown verb)"' \
+      "${SHBANG_RT[home]}/spec/verbs.json")
+    printf '[dry-run] %-6s %s  %s  %s@%s:%s\n' \
+      "$verb" "$label" \
+      "${ed_event[args]}" "${ed_event[user]}" \
+      "${ed_event[host]}" "${ed_event[path]}"
+    return 0
+  fi
+
+  "$fn" ed_event
 }
 
 # Flush _CMD_QUEUE: deserialise each JSON entry into an associative array and
 # run it through the full event pipeline (console prints, dispatch executes).
 # Called from cmd_run after parse_playbook returns.
 dispatch_queue() {
-  local -n dq_rt=$1
   mkdir -p "$_SHBANG_CTL_DIR"
   local entry
   local -A dq_event
   for entry in "${_CMD_QUEUE[@]}"; do
-    dq_event=()
-    local line k v
-    while IFS= read -r line; do
-      k=${line%%=*}
-      v=${line#*=}
-      dq_event[$k]=$v
-    done < <(jq -r 'to_entries[] | "\(.key)=\(.value)"' <<< "$entry" | tr -d '\r')
-    emit dq_rt dq_event
+    dq_event=(
+      [type]=$(jq -r .type <<< "$entry")
+      [user]=$(jq -r .user <<< "$entry")
+      [host]=$(jq -r .host <<< "$entry")
+      [path]=$(jq -r .path <<< "$entry")
+      [verb]=$(jq -r .verb <<< "$entry")
+      [args]=$(jq -r .args <<< "$entry")
+    )
+    emit dq_event
   done
   _CMD_QUEUE=()
 }
 
 dispatch_scp() {
-  local -n ds_rt=$1
-  local -n ds_event=$2
+  local -n ds_event=$1
   local user=${ds_event[user]}
   local host=${ds_event[host]}
   local path=${ds_event[path]}
@@ -69,8 +81,7 @@ dispatch_scp() {
 }
 
 dispatch_ssh() {
-  local -n dsh_rt=$1
-  local -n dsh_event=$2
+  local -n dsh_event=$1
   local user=${dsh_event[user]}
   local host=${dsh_event[host]}
   local path=${dsh_event[path]}
