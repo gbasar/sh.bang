@@ -19,13 +19,27 @@ _ssh_opts() {
     " -o ControlPersist=30s"
 }
 
-# Registered in EVENT_HANDLERS; skips events not in CMD_DISPATCH and dry-runs.
+# Registered in EVENT_HANDLERS; skips events not in CMD_DISPATCH.
+# On dry-run: prints a labelled line from verbs.json instead of executing.
 event_dispatch() {
   local -n ed_event=$1
   local type=${ed_event[type]}
   local fn=${CMD_DISPATCH[$type]:-}
-  [[ -n $fn ]]                          || return 0
-  [[ ${SHBANG_RT[dry_run]} == true ]]   && return 0
+  [[ -n $fn ]] || return 0
+
+  if [[ ${SHBANG_RT[dry_run]} == true ]]; then
+    local verb=${ed_event[verb]}
+    local label
+    label=$(jq -r --arg v "$verb" \
+      '.verbs[$v].dry_run // "(unknown verb)"' \
+      "${SHBANG_RT[home]}/spec/verbs.json")
+    printf '[dry-run] %-6s %s  %s  %s@%s:%s\n' \
+      "$verb" "$label" \
+      "${ed_event[args]}" "${ed_event[user]}" \
+      "${ed_event[host]}" "${ed_event[path]}"
+    return 0
+  fi
+
   "$fn" ed_event
 }
 

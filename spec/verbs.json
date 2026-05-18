@@ -1,0 +1,7 @@
+{
+  "verbs": {
+    "send":  { "kind": "scp", "direction": "push", "dry_run": "→ scp push" },
+    "fetch": { "kind": "scp", "direction": "pull", "dry_run": "← scp pull" },
+    "run":   { "kind": "ssh", "direction": "exec", "dry_run": "ssh exec"   }
+  }
+}
