@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ssh-server",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "--build", "server"],
+      "port": 22
+    },
+    {
+      "name": "tests",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "run", "--rm", "test"],
+      "port": 0
+    },
+    {
+      "name": "run-replay",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "run", "--rm", "run"],
+      "port": 0
+    },
+    {
+      "name": "tests-native",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["tests/run-tests"],
+      "port": 0
+    },
+    {
+      "name": "svg-preview",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "7700"],
+      "port": 7700
+    }
+  ]
+}

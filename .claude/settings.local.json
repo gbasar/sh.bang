@@ -8,7 +8,8 @@
       "Bash(bash \"C:/d/i/py1/devprojects/sh.bang/tests/run-tests\")",
       "Bash(echo \"EXIT: $?\")",
       "Bash(timeout 5 bash \"C:/d/i/py1/devprojects/sh.bang/bin/sh.bang\" run \"C:/d/i/py1/devprojects/sh.bang/examples/replay.shbang\" --ctx \"C:/d/i/py1/devprojects/sh.bang/examples/context.json\" --dry-run)",
-      "Bash(timeout 5 bash \"C:/d/i/py1/devprojects/sh.bang/bin/sh.bang\" -vvvv run \"C:/d/i/py1/devprojects/sh.bang/examples/replay.shbang\" --ctx \"C:/d/i/py1/devprojects/sh.bang/examples/context.json\" --dry-run)"
+      "Bash(timeout 5 bash \"C:/d/i/py1/devprojects/sh.bang/bin/sh.bang\" -vvvv run \"C:/d/i/py1/devprojects/sh.bang/examples/replay.shbang\" --ctx \"C:/d/i/py1/devprojects/sh.bang/examples/context.json\" --dry-run)",
+      "Bash(git add *)"
     ]
   }
 }
