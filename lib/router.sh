@@ -32,14 +32,14 @@ cli_flag_value() {
   local flag=$2
   local field=$3
 
-  jq -er --arg flag "$flag" --arg field "$field" '.flags[$flag][$field]' "$spec"
+  jq -er --arg flag "$flag" --arg field "$field" '.flags[$flag][$field] // empty' "$spec"
 }
 
 args_drop() {
   local count=$1
-  local -n args=$2
+  local -n drop_args=$2
 
-  args=("${args[@]:count}")
+  drop_args=("${drop_args[@]:count}")
 }
 
 route_flags() {
@@ -83,7 +83,7 @@ route_cli() {
 }
 
 parse_run_args() {
-  local -n run_rt=$1
+  local -n parse_rt=$1
   local -n out=$2
   shift 2
 
@@ -94,7 +94,7 @@ parse_run_args() {
   out[playbook]=${args[0]}
   args_drop 1 args
 
-  route_flags run_rt args RUN_FLAG_HANDLERS out
+  route_flags parse_rt args RUN_FLAG_HANDLERS out
   [[ ${#args[@]} -eq 0 ]] || die "unknown arg: ${args[0]}"
 
   [[ -f ${out[playbook]} ]] || die "playbook not found: ${out[playbook]}"
