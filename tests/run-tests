@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly BIN="$ROOT/bin/sh.bang"
+
+fail() {
+  printf '[test:fail] %s\n' "$*" >&2
+  exit 1
+}
+
+assert_contains() {
+  local haystack=$1
+  local needle=$2
+
+  [[ $haystack == *"$needle"* ]] || fail "expected output to contain: $needle"
+}
+
+version_output=$("$BIN" --version)
+[[ $version_output == "0.1.0" ]] || fail "bad version: $version_output"
+
+parse_output=$("$BIN" run "$ROOT/examples/replay.shbang" --ctx "$ROOT/examples/context.json" --dry-run)
+assert_contains "$parse_output" "[for_each] topology.shards[shard3]"
+assert_contains "$parse_output" '[pipe] subject=@${host}:${install.dir}/datadir/archive verb=send args=${resources.replayJar}'
+assert_contains "$parse_output" '[pipe] subject=#${host}:${install.dir}/datadir/archive verb=run args=${java} -jar replay.jar --vpn ${vpn} --user ${user.name}'
+
+verbose_output=$("$BIN" -vvvv run "$ROOT/examples/replay.shbang" --ctx "$ROOT/examples/context.json" --dry-run 2>&1)
+assert_contains "$verbose_output" "[sh.bang:info] playbook:"
+assert_contains "$verbose_output" "[sh.bang:debug] parsed for_each selector=topology.shards[shard3]"
+assert_contains "$verbose_output" '[sh.bang:wire] pipe args=${resources.replayJar}'
+
+help_output=$("$BIN" --help)
+assert_contains "$help_output" "sh.bang --version"
+assert_contains "$help_output" $'-vvvv\twire - show detailed command fields'
+
+bad_file=$(mktemp)
+trap 'rm -f "$bad_file"' EXIT
+printf 'not valid\n' > "$bad_file"
+
+if "$BIN" run "$bad_file" --ctx "$ROOT/examples/context.json" --dry-run >/tmp/shbang-test.out 2>/tmp/shbang-test.err; then
+  fail "invalid playbook unexpectedly succeeded"
+fi
+
+printf '[test:ok] parser cli\n'
