@@ -3,63 +3,67 @@
 declare -A EVENT_HANDLERS=(
   [console]=event_console
   [file]=event_file
+  [expand]=event_expand
+  [dispatch]=event_dispatch
 )
 
 declare -A CONSOLE_EVENT_FORMATTERS=(
   [run.loaded]=console_run_loaded
   [parser.for_each]=console_parser_for_each
   [parser.pipe]=console_parser_pipe
+  [cmd.scp]=console_cmd_scp
+  [cmd.ssh]=console_cmd_ssh
 )
 
 emit() {
-  local -n rt=$1
-  local -n event=$2
+  local -n emit_rt=$1
+  local -n emit_event=$2
   local -a handlers
   local name
 
-  read -r -a handlers <<< "${rt[event_handlers]}"
+  read -r -a handlers <<< "${emit_rt[event_handlers]}"
 
   for name in "${handlers[@]}"; do
     local fn=${EVENT_HANDLERS[$name]:-}
     [[ -n $fn ]] || die "unknown event handler: $name"
-    "$fn" rt event
+    "$fn" emit_rt emit_event
   done
 }
 
 # what the fuck is shift agian? 
 emit_kv() {
-  local -n rt=$1
+  local -n kv_rt=$1
   local type=$2
   shift 2
 
-  local -A event=([type]="$type")
+  local -A kv_event=([type]="$type")
 
   while (($# > 0)); do
     local key=$1
     local value=${2:-}
-    event[$key]=$value
+    kv_event[$key]=$value
     shift 2
   done
 
-  emit rt event
+  emit kv_rt kv_event
 }
 
 event_console() {
-  local -n rt=$1
-  local -n event=$2
-  local type=${event[type]}
+  local -n ec_rt=$1
+  local -n ec_event=$2
+  local type=${ec_event[type]}
   local formatter=${CONSOLE_EVENT_FORMATTERS[$type]:-console_default}
 
-  "$formatter" rt event
+  "$formatter" ec_rt ec_event
 }
 
 console_run_loaded() {
-  local -n rt=$1
-  local -n event=$2
+  local -n crl_rt=$1
+  local -n crl_event=$2
 
-  log_info "playbook: ${event[playbook]}"
-  log_info "context: ${event[ctx]}"
-  log_info "dry-run: ${rt[dry_run]}"
+  log_info "playbook: ${crl_event[playbook]}"
+  log_info "context: ${crl_event[ctx]}"
+  log_info "dry-run: ${crl_rt[dry_run]}"
 }
 
 console_parser_for_each() {
@@ -77,6 +81,18 @@ console_parser_pipe() {
     "${event[args]}"
 }
 
+console_cmd_scp() {
+  local -n event=$2
+  printf '[cmd:scp] %s:%s  %s  %s\n' \
+    "${event[host]}" "${event[path]}" "${event[verb]}" "${event[args]}"
+}
+
+console_cmd_ssh() {
+  local -n event=$2
+  printf '[cmd:ssh] %s:%s  %s  %s\n' \
+    "${event[host]}" "${event[path]}" "${event[verb]}" "${event[args]}"
+}
+
 console_default() {
   local -n event=$2
 
@@ -84,24 +100,24 @@ console_default() {
 }
 
 event_file() {
-  local -n rt=$1
-  local -n event=$2
+  local -n ef_rt=$1
+  local -n ef_event=$2
 
-  [[ -n ${rt[event_file]:-} ]] || return 0
+  [[ -n ${ef_rt[event_file]:-} ]] || return 0
 
-  event_to_json event >> "${rt[event_file]}"
+  event_to_json ef_event >> "${ef_rt[event_file]}"
 }
 
 # can jq really not do this?
 event_to_json() {
-  local -n event=$1
+  local -n etj_event=$1
   local -a jq_args=()
   local filter='{'
   local key
   local first=true
 
-  for key in "${!event[@]}"; do
-    jq_args+=(--arg "$key" "${event[$key]}")
+  for key in "${!etj_event[@]}"; do
+    jq_args+=(--arg "$key" "${etj_event[$key]}")
     if [[ $first == true ]]; then
       first=false
     else
