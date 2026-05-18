@@ -51,13 +51,14 @@ dispatch_queue() {
   local entry
   local -A dq_event
   for entry in "${_CMD_QUEUE[@]}"; do
-    dq_event=()
-    local line k v
-    while IFS= read -r line; do
-      k=${line%%=*}
-      v=${line#*=}
-      dq_event[$k]=$v
-    done < <(jq -r 'to_entries[] | "\(.key)=\(.value)"' <<< "$entry" | tr -d '\r')
+    dq_event=(
+      [type]=$(jq -r .type <<< "$entry")
+      [user]=$(jq -r .user <<< "$entry")
+      [host]=$(jq -r .host <<< "$entry")
+      [path]=$(jq -r .path <<< "$entry")
+      [verb]=$(jq -r .verb <<< "$entry")
+      [args]=$(jq -r .args <<< "$entry")
+    )
     emit dq_event
   done
   _CMD_QUEUE=()

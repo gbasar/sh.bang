@@ -103,24 +103,22 @@ event_file() {
   event_to_json ef_event >> "${SHBANG_RT[event_file]}"
 }
 
-# can jq really not do this?
+# pure bash — no jq subprocess per event
 event_to_json() {
   local -n etj_event=$1
-  local -a jq_args=()
-  local filter='{'
-  local key
+  local out='{'
+  local key val escaped
   local first=true
 
   for key in "${!etj_event[@]}"; do
-    jq_args+=(--arg "$key" "${etj_event[$key]}")
-    if [[ $first == true ]]; then
-      first=false
-    else
-      filter+=','
-    fi
-    filter+="\"$key\":\$$key"
+    val=${etj_event[$key]}
+    # escape backslashes then double-quotes
+    escaped=${val//\\/\\\\}
+    escaped=${escaped//\"/\\\"}
+    [[ $first == true ]] && first=false || out+=','
+    out+="\"${key}\":\"${escaped}\""
   done
 
-  filter+='}'
-  jq -cn "${jq_args[@]}" "$filter"
+  out+='}'
+  printf '%s\n' "$out"
 }
