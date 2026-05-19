@@ -1,5 +1,6 @@
 # Server: remote execution target — accepts SSH, runs deployed JARs
-FROM redhat/ubi9
+ARG REGISTRY=redhat
+FROM ${REGISTRY}/ubi9
 
 RUN dnf install -y java-17-openjdk-headless openssh-server && dnf clean all
 

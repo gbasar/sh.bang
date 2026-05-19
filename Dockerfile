@@ -1,5 +1,6 @@
 # Client: runs sh.bang, converts HOCON, dispatches to servers
-FROM redhat/ubi9
+ARG REGISTRY=redhat
+FROM ${REGISTRY}/ubi9
 
 ARG HOCON_JAR_URL
 
