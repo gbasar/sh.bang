@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# tap — live event stream viewer for sh.bang
+# Follows an event log file (NDJSON), formats and filters by type.
+#
+# Usage:
+#   tap [--file PATH] [--filter TYPE[,TYPE...]] [--raw] [--color auto|on|off]
+#
+# With no --file, reads stdin (pipe sh.bang output into it).
+# sh.bang writes NDJSON to --log-file; tap reads it.
+#
+# Examples:
+#   sh.bang run playbook.shbang --ctx ctx.json --log-file /tmp/run.log &
+#   tap --file /tmp/run.log --filter cmd.scp,cmd.ssh
+#
+#   # Or pipe:
+#   sh.bang run playbook.shbang --ctx ctx.json --dry-run 2>&1 | tap --raw
+set -euo pipefail
+
+# ---------- color ----------
+
+_TAP_COLOR=${TAP_COLOR:-auto}
+_C_RESET='' _C_TYPE='' _C_KEY='' _C_VAL='' _C_DIM='' _C_ERR=''
+
+_tap_init_color() {
+  if [[ $_TAP_COLOR == on ]] || { [[ $_TAP_COLOR == auto ]] && [[ -t 1 ]]; }; then
+    _C_RESET=$'\e[0m'
+    _C_TYPE=$'\e[1;36m'   # bold cyan  — event type
+    _C_KEY=$'\e[33m'      # yellow     — key
+    _C_VAL=$'\e[0m'       # normal     — value
+    _C_DIM=$'\e[2m'       # dim        — punctuation
+    _C_ERR=$'\e[1;31m'    # bold red   — parse errors
+  fi
+}
+
+# ---------- formatter ----------
+
+# Takes one NDJSON line, pretty-prints it.
+_tap_format() {
+  local line=$1
+
+  # Validate it looks like JSON
+  if ! jq -e . >/dev/null 2>&1 <<< "$line"; then
+    printf '%s[tap:bad-json]%s %s\n' "$_C_ERR" "$_C_RESET" "$line"
+    return
+  fi
+
+  local type
+  type=$(jq -r '.type // "(unknown)"' <<< "$line")
+
+  # Filter check (set by caller via _TAP_FILTER array)
+  if (( ${#_TAP_FILTER[@]} > 0 )); then
+    local match=false
+    local f
+    for f in "${_TAP_FILTER[@]}"; do
+      [[ $type == $f ]] && match=true && break
+    done
+    [[ $match == true ]] || return 0
+  fi
+
+  # Header line: type
+  printf '%s%-20s%s' "$_C_TYPE" "$type" "$_C_RESET"
+
+  # Key=value pairs (everything except "type")
+  local pairs
+  pairs=$(jq -r 'to_entries[] | select(.key != "type") | "\(.key)=\(.value)"' <<< "$line")
+
+  while IFS= read -r pair; do
+    [[ -z $pair ]] && continue
+    local k=${pair%%=*}
+    local v=${pair#*=}
+    printf '  %s%s%s=%s%s%s' "$_C_KEY" "$k" "$_C_DIM" "$_C_VAL" "$v" "$_C_RESET"
+  done <<< "$pairs"
+
+  printf '\n'
+}
+
+# ---------- arg parsing ----------
+
+_TAP_FILE="-"    # stdin by default
+_TAP_RAW=false
+declare -a _TAP_FILTER=()
+
+_tap_usage() {
+  cat >&2 <<'EOF'
+Usage: tap [OPTIONS]
+
+Options:
+  --file PATH          NDJSON event log to follow (default: stdin)
+  --filter TYPE,...    Only show these event types (comma-separated, globs ok)
+  --raw                Print raw NDJSON, no formatting
+  --color on|off|auto  Color control (default: auto)
+  -h, --help           This message
+EOF
+  exit "${1:-0}"
+}
+
+while (($# > 0)); do
+  case $1 in
+    --file)    _TAP_FILE=$2;  shift 2 ;;
+    --filter)  IFS=',' read -r -a _TAP_FILTER <<< "$2"; shift 2 ;;
+    --raw)     _TAP_RAW=true; shift ;;
+    --color)   _TAP_COLOR=$2; shift 2 ;;
+    -h|--help) _tap_usage 0 ;;
+    *)         printf 'tap: unknown option: %s\n' "$1" >&2; _tap_usage 1 ;;
+  esac
+done
+
+_tap_init_color
+
+# ---------- main loop ----------
+
+_tap_run() {
+  local src=$1
+
+  if [[ $src == - ]]; then
+    while IFS= read -r line || [[ -n $line ]]; do
+      [[ -z ${line// } ]] && continue
+      if [[ $_TAP_RAW == true ]]; then
+        printf '%s\n' "$line"
+      else
+        _tap_format "$line"
+      fi
+    done
+  else
+    # Follow mode: tail -f equivalent, but portable
+    # Use tail -F so it handles log rotation too
+    tail -F "$src" 2>/dev/null | while IFS= read -r line || [[ -n $line ]]; do
+      [[ -z ${line// } ]] && continue
+      if [[ $_TAP_RAW == true ]]; then
+        printf '%s\n' "$line"
+      else
+        _tap_format "$line"
+      fi
+    done
+  fi
+}
+
+_tap_run "$_TAP_FILE"
