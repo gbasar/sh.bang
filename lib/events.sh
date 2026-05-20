@@ -104,13 +104,17 @@ event_file() {
 }
 
 # pure bash — no jq subprocess per event
+# bash 4.4 compat: ${!nameref[@]} is broken in 4.4 so we eval the key list
 event_to_json() {
-  local -n etj_event=$1
+  local _etj_ref=$1
+  local -n etj_event=$_etj_ref
   local out='{'
   local key val escaped
   local first=true
+  local -a _etj_keys
+  eval "_etj_keys=(\"\${!${_etj_ref}[@]}\")"
 
-  for key in "${!etj_event[@]}"; do
+  for key in "${_etj_keys[@]}"; do
     val=${etj_event[$key]}
     # escape backslashes then double-quotes
     escaped=${val//\\/\\\\}

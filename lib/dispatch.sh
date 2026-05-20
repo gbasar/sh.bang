@@ -74,8 +74,8 @@ dispatch_scp() {
 
   # shellcheck disable=SC2046
   case $verb in
-    send)  scp $(_ssh_opts) "$args" "${user}@${host}:${path}" ;;
-    fetch) scp $(_ssh_opts) "${user}@${host}:${path}" "$args" ;;
+    send)  MSYS_NO_PATHCONV=1 scp $(_ssh_opts) "$args" "${user}@${host}:${path}" ;;
+    fetch) MSYS_NO_PATHCONV=1 scp $(_ssh_opts) "${user}@${host}:${path}" "$args" ;;
     *)     log_debug "dispatch_scp: unknown verb: $verb" ;;
   esac
 }
@@ -90,7 +90,7 @@ dispatch_ssh() {
 
   # shellcheck disable=SC2046
   case $verb in
-    run) ssh $(_ssh_opts) "${user}@${host}" "cd ${path} && ${args}" ;;
+    run) MSYS_NO_PATHCONV=1 ssh $(_ssh_opts) "${user}@${host}" "cd ${path} && ${args}" ;;
     *)   log_debug "dispatch_ssh: unknown verb: $verb" ;;
   esac
 }

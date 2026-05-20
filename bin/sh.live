@@ -1,0 +1,295 @@
+#!/usr/bin/env bash
+# sh.live — interactive sh.bang event bus playground
+#
+# Runs a hot-reload loop: watches a .shbang scenario file and a live.json
+# config file. On any change, re-runs the scenario. Accepts injected events
+# via a named pipe so you can poke the bus while it's running.
+#
+# Usage:
+#   sh.live [--scenario FILE] [--ctx FILE] [--config FILE] [--pipe PATH]
+#
+# Files watched:
+#   --scenario   .shbang playbook  (re-run on change, default: live.shbang)
+#   --ctx        context JSON      (passed to parser, default: live.json)
+#   --config     live config JSON  (re-read each loop, tweaks SHBANG_RT)
+#   --pipe       FIFO path         (inject raw event JSON, default: /tmp/sh.live.pipe)
+#
+# live-config.json keys (all optional, re-read every loop):
+#   dry_run      true/false
+#   verbosity    0-4
+#   handlers     space-separated handler names  e.g. "console file"
+#   log_file     path for event_file handler
+#
+# Inject an event:
+#   echo '{"type":"cmd.ssh","user":"deploy","host":"app01","path":"/opt","verb":"run","args":"uptime"}' \
+#     > /tmp/sh.live.pipe
+#
+# Key bindings (stdin, only when interactive):
+#   r   force re-run
+#   q   quit
+#   h   show help
+set -euo pipefail
+
+readonly _LIVE_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$_LIVE_HOME/lib/log.sh"
+source "$_LIVE_HOME/lib/events.sh"
+source "$_LIVE_HOME/lib/parser.sh"
+source "$_LIVE_HOME/lib/router.sh"
+source "$_LIVE_HOME/lib/expand.sh"
+source "$_LIVE_HOME/lib/dispatch.sh"
+source "$_LIVE_HOME/lib/hocon.sh"
+
+# ---------- defaults ----------
+
+_LIVE_SCENARIO="${_LIVE_HOME}/live.shbang"
+_LIVE_CTX=""
+_LIVE_CONFIG="${_LIVE_HOME}/live-config.json"
+_LIVE_PIPE="/tmp/sh.live.pipe"
+_LIVE_POLL_MS=500   # mtime poll interval in milliseconds
+_LIVE_INTERACTIVE=false
+[[ -t 0 ]] && _LIVE_INTERACTIVE=true
+
+# ---------- color ----------
+
+_C_RESET=$'\e[0m'
+_C_HEAD=$'\e[1;35m'    # bold magenta — section header
+_C_RUN=$'\e[1;32m'     # bold green   — run marker
+_C_CHANGE=$'\e[1;33m'  # bold yellow  — change detected
+_C_INJ=$'\e[1;36m'     # bold cyan    — injection
+_C_ERR=$'\e[1;31m'     # bold red
+_C_DIM=$'\e[2m'
+
+# ---------- arg parsing ----------
+
+_live_usage() {
+  cat >&2 <<EOF
+Usage: sh.live [OPTIONS]
+
+Options:
+  --scenario FILE   .shbang playbook to watch (default: live.shbang in project root)
+  --ctx FILE        context JSON for the playbook
+  --config FILE     live-config JSON, re-read each loop (default: live-config.json)
+  --pipe PATH       FIFO path for event injection (default: /tmp/sh.live.pipe)
+  --no-color        disable color output
+  -h, --help        this message
+EOF
+  exit "${1:-0}"
+}
+
+while (($# > 0)); do
+  case $1 in
+    --scenario) _LIVE_SCENARIO=$2; shift 2 ;;
+    --ctx)      _LIVE_CTX=$2;      shift 2 ;;
+    --config)   _LIVE_CONFIG=$2;   shift 2 ;;
+    --pipe)     _LIVE_PIPE=$2;     shift 2 ;;
+    --no-color) _C_RESET='' _C_HEAD='' _C_RUN='' _C_CHANGE='' _C_INJ='' _C_ERR='' _C_DIM=''; shift ;;
+    -h|--help)  _live_usage 0 ;;
+    *)          printf 'sh.live: unknown option: %s\n' "$1" >&2; _live_usage 1 ;;
+  esac
+done
+
+# ---------- runtime init ----------
+
+_live_rt_init() {
+  declare -gA SHBANG_RT=(
+    [verbosity]=1
+    [dry_run]=true
+    [version]="live"
+    [home]="$_LIVE_HOME"
+    [cli_spec]="$_LIVE_HOME/spec/cli.json"
+    [event_handlers]="console dispatch"
+    [event_file]=""
+    [ctx]="${_LIVE_CTX:-}"
+  )
+}
+
+# ---------- config reload ----------
+# Reads live-config.json (if present) and updates SHBANG_RT fields.
+# Called before every run so config changes take effect immediately.
+
+_live_apply_config() {
+  [[ -f $_LIVE_CONFIG ]] || return 0
+
+  local cfg
+  cfg=$(cat "$_LIVE_CONFIG" 2>/dev/null) || return 0
+
+  local v
+  v=$(jq -r '.dry_run   // empty' <<< "$cfg" 2>/dev/null) && [[ -n $v ]] && SHBANG_RT[dry_run]=$v
+  v=$(jq -r '.verbosity // empty' <<< "$cfg" 2>/dev/null) && [[ -n $v ]] && SHBANG_RT[verbosity]=$v
+  v=$(jq -r '.handlers  // empty' <<< "$cfg" 2>/dev/null) && [[ -n $v ]] && SHBANG_RT[event_handlers]=$v
+  v=$(jq -r '.log_file  // empty' <<< "$cfg" 2>/dev/null) && [[ -n $v ]] && SHBANG_RT[event_file]=$v
+  v=$(jq -r '.ctx       // empty' <<< "$cfg" 2>/dev/null) && [[ -n $v ]] && SHBANG_RT[ctx]=$v
+}
+
+# ---------- run one scenario ----------
+
+_live_run_once() {
+  local scenario=$1
+  local run_id
+  run_id=$(date '+%H:%M:%S')
+
+  printf '\n%s━━━  sh.live  %s  ━━━%s\n' "$_C_RUN" "$run_id" "$_C_RESET"
+  printf '%sdry_run=%s  verbosity=%s  handlers=%s%s\n' \
+    "$_C_DIM" "${SHBANG_RT[dry_run]}" "${SHBANG_RT[verbosity]}" \
+    "${SHBANG_RT[event_handlers]}" "$_C_RESET"
+
+  if [[ ! -f $scenario ]]; then
+    printf '%s[sh.live] scenario not found: %s%s\n' "$_C_ERR" "$scenario" "$_C_RESET"
+    return 1
+  fi
+
+  _CMD_QUEUE=()
+
+  (
+    # Run in subshell so parse errors don't kill the loop
+    set +e
+    parse_playbook "$scenario"
+    dispatch_queue
+  )
+  local rc=$?
+  [[ $rc -ne 0 ]] && printf '%s[sh.live] run exited %d%s\n' "$_C_ERR" "$rc" "$_C_RESET"
+
+  printf '%s━━━  done  ━━━%s\n' "$_C_DIM" "$_C_RESET"
+}
+
+# ---------- inject handler ----------
+# Reads one JSON event from the FIFO and injects it into the bus.
+
+_live_inject() {
+  local line=$1
+  [[ -z ${line// } ]] && return 0
+
+  printf '%s[inject] %s%s\n' "$_C_INJ" "$line" "$_C_RESET"
+
+  local -A inj_event
+  local k
+  for k in type user host path verb args; do
+    inj_event[$k]=$(jq -r --arg k "$k" '.[$k] // ""' <<< "$line" 2>/dev/null || true)
+  done
+  [[ -z ${inj_event[type]:-} ]] && {
+    printf '%s[inject] missing "type" field, skipped%s\n' "$_C_ERR" "$_C_RESET"
+    return 0
+  }
+
+  emit inj_event
+}
+
+# ---------- mtime helper ----------
+
+_mtime() {
+  # Returns last-modified epoch seconds. Portable: stat on Linux, macOS, Git Bash.
+  local f=$1
+  [[ -f $f ]] || { printf '0'; return; }
+  stat -c '%Y' "$f" 2>/dev/null || stat -f '%m' "$f" 2>/dev/null || printf '0'
+}
+
+# ---------- keyboard (non-blocking, interactive only) ----------
+
+_live_check_key() {
+  [[ $_LIVE_INTERACTIVE == true ]] || return 0
+  local key
+  # read with timeout 0 = non-blocking
+  IFS= read -r -s -t 0.05 -n 1 key 2>/dev/null || true
+  case ${key:-} in
+    r|R) printf '%s[sh.live] manual re-run%s\n' "$_C_CHANGE" "$_C_RESET"; return 1 ;;  # signal re-run
+    q|Q) printf '%s[sh.live] quit%s\n' "$_C_DIM" "$_C_RESET"; exit 0 ;;
+    h|H)
+      printf '%s[sh.live] keys: r=re-run  q=quit  h=help%s\n' "$_C_DIM" "$_C_RESET"
+      ;;
+  esac
+  return 0
+}
+
+# ---------- setup ----------
+
+_live_setup() {
+  # Create FIFO for injection
+  [[ -p $_LIVE_PIPE ]] || mkfifo "$_LIVE_PIPE" 2>/dev/null || true
+
+  # Print startup banner
+  printf '%ssh.live%s  watching %s\n' "$_C_HEAD" "$_C_RESET" "$_LIVE_SCENARIO"
+  printf '%sconfig%s   %s\n' "$_C_DIM" "$_C_RESET" "$_LIVE_CONFIG"
+  printf '%sinject%s   echo JSON > %s%s\n' "$_C_DIM" "$_C_RESET" "$_LIVE_PIPE" ""
+  [[ $_LIVE_INTERACTIVE == true ]] && \
+    printf '%skeys%s     r=re-run  q=quit  h=help\n' "$_C_DIM" "$_C_RESET"
+  printf '\n'
+
+  # Create a starter scenario if none exists
+  if [[ ! -f $_LIVE_SCENARIO ]]; then
+    cat > "$_LIVE_SCENARIO" <<'EOF'
+// sh.live starter scenario — edit and save to re-run
+for_each ${topology.shards}
+| @${host}:${install.dir} send ${resources.replayJar}
+| #${host}:${install.dir} run  ${resources.java} -jar replay.jar
+EOF
+    printf '%s[sh.live] created starter scenario: %s%s\n' \
+      "$_C_CHANGE" "$_LIVE_SCENARIO" "$_C_RESET"
+  fi
+
+  # Create a starter config if none exists
+  if [[ ! -f $_LIVE_CONFIG ]]; then
+    cat > "$_LIVE_CONFIG" <<'EOF'
+{
+  "dry_run":   true,
+  "verbosity": 1,
+  "handlers":  "console dispatch"
+}
+EOF
+    printf '%s[sh.live] created starter config: %s%s\n' \
+      "$_C_CHANGE" "$_LIVE_CONFIG" "$_C_RESET"
+  fi
+}
+
+# ---------- main loop ----------
+
+_live_rt_init
+_live_setup
+_live_apply_config
+_live_run_once "$_LIVE_SCENARIO"
+
+_last_scenario_mtime=$(_mtime "$_LIVE_SCENARIO")
+_last_config_mtime=$(_mtime "$_LIVE_CONFIG")
+
+# Open FIFO in non-blocking read-only; fd 3
+exec 3<> "$_LIVE_PIPE"
+
+while true; do
+  sleep 0.${_LIVE_POLL_MS}
+
+  # Check keyboard
+  _live_check_key || {
+    _live_apply_config
+    _live_run_once "$_LIVE_SCENARIO"
+    _last_scenario_mtime=$(_mtime "$_LIVE_SCENARIO")
+    _last_config_mtime=$(_mtime "$_LIVE_CONFIG")
+    continue
+  }
+
+  # Check for file changes
+  _cur_scenario_mtime=$(_mtime "$_LIVE_SCENARIO")
+  _cur_config_mtime=$(_mtime "$_LIVE_CONFIG")
+
+  _changed=false
+  if [[ $_cur_scenario_mtime != "$_last_scenario_mtime" ]]; then
+    printf '%s[sh.live] scenario changed%s\n' "$_C_CHANGE" "$_C_RESET"
+    _changed=true
+    _last_scenario_mtime=$_cur_scenario_mtime
+  fi
+  if [[ $_cur_config_mtime != "$_last_config_mtime" ]]; then
+    printf '%s[sh.live] config changed%s\n' "$_C_CHANGE" "$_C_RESET"
+    _changed=true
+    _last_config_mtime=$_cur_config_mtime
+  fi
+
+  if [[ $_changed == true ]]; then
+    _live_apply_config
+    _live_run_once "$_LIVE_SCENARIO"
+  fi
+
+  # Drain FIFO (non-blocking)
+  while IFS= read -r -t 0 line <&3 2>/dev/null; do
+    [[ -n ${line// } ]] && _live_inject "$line"
+  done
+
+done
