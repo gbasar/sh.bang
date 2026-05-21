@@ -40,9 +40,11 @@ fetch_ctx() {
   printf '%s' "$tmp"
 }
 
-# Resolve ctx to a local JSON file path, eagerly.
-# - URL (http/https): downloaded immediately, GITLAB_TOKEN/CTX_TOKEN used if set
-# - .hocon (local or downloaded): converted to JSON via hocon.jar
+# Resolve ctx to a local file path, eagerly.
+# - URL (http/https): downloaded immediately regardless of file type —
+#   works for .json, .hocon, or anything else stored in GitLab/http
+#   Set GITLAB_TOKEN or CTX_TOKEN for auth.
+# - .hocon (local or downloaded): then converted to JSON via hocon.jar
 # - anything else: returned as-is
 # Caller owns cleanup of any temp files (bin/sh.bang tracks _ctx_tmp).
 resolve_ctx() {
