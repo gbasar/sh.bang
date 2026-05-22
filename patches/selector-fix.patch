@@ -1,0 +1,25 @@
+diff --git a/lib/expand.sh b/lib/expand.sh
+index eb8f9f6..3bc18bb 100644
+--- a/lib/expand.sh
++++ b/lib/expand.sh
+@@ -8,10 +8,16 @@ _CMD_QUEUE=()
+ 
+ selector_to_jq() {
+   local sel=$1
+-  # topology.shards[shard3] → .topology.shards.shard3
+-  # topology.shards[*]      → .topology.shards[]
+-  printf '.%s' "$sel" \
+-    | sed 's/\[\*\]/[]/g; s/\[\([^*][^]]*\)\]/.\1/g'
++  # trading.shards[*]   → .trading.shards[]       (iterate all values)
++  # trading.shards[4]   → .trading.shards["4"]    (string key — works for integer-keyed maps)
++  # trading.shards[foo] → .trading.shards["foo"]  (named key)
++  # plain trading.shards with no brackets → .trading.shards[]  (auto-iterate)
++  local result
++  result=$(printf '.%s' "$sel" \
++    | sed 's/\[\*\]/[]/g; s/\[\([^*][^]]*\)\]/["\1"]/g')
++  # if no explicit [] iteration, append [] so for_each always iterates
++  [[ $result == *'[]'* ]] || result="${result}[]"
++  printf '%s' "$result"
+ }
+ 
+ render_vars() {
