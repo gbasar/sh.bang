@@ -11,7 +11,7 @@ source "$SHBANG_HOME/lib/parser.sh"
 source "$SHBANG_HOME/lib/router.sh"
 source "$SHBANG_HOME/lib/expand.sh"
 source "$SHBANG_HOME/lib/dispatch.sh"
-source "$SHBANG_HOME/lib/hocon.sh"
+source "$SHBANG_HOME/lib/ctx.sh"
 
 declare -A SHBANG_COMMANDS=(
   [run]=cmd_run
