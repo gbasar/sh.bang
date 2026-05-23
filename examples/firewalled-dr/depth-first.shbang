@@ -1,0 +1,20 @@
+#! Push new version — DR first, primary last
+
+
+#! Upgrade all shards (depth-first — DR before primary)
+
+for_each ${trading.shard[*]}
+|
+| #! DR first (firewalled — hop through primary)
+|
+| for_each ${dr.host}
+| | @${dr.host}:${dr.directory}/app/${appName}/lib send ${resources.replayJar}
+| | @${dr.host}:${dr.directory}/app/${appName}/bin run restart.sh
+|
+| #! Primary and failover last
+| #  (DR is already done for this shard — depth-first gives us this for free)
+|
+| @${primary.host}:${install.directory}/app/${appName}/lib send ${resources.replayJar}
+| @${primary.host}:${install.directory}/app/${appName}/bin run restart.sh
+| @${failover.host}:${install.directory}/app/${appName}/lib send ${resources.replayJar}
+| @${failover.host}:${install.directory}/app/${appName}/bin run restart.sh

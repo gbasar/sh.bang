@@ -1,0 +1,30 @@
+
+install {
+  directory = /local/1/trading
+  user = sysprod
+}
+
+logging {
+  level = warn
+}
+
+runtime {
+  javaHome = /usr/bin/java/jdk8
+}
+
+// i believe this is provided to the runtime at startup
+trading {
+  shard {
+    4 {
+      primary.host = hostName
+      primary.directory = ${install.directory}"/shard_4"
+      backup.host = otherHost
+      backup.directory = ${install.directory}"/shard_4"
+    }
+    dr {
+      host = drhost
+      install.directory = ${install.directory}"/shard_dr"
+    }
+    5 {}
+  }
+}
