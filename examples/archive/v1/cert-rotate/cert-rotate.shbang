@@ -1,6 +1,0 @@
-// Emergency TLS cert rotation across all shards: push cert + key, reload, verify
-for_each ${topology.shards[*]}
-| @${host}:${ssl.dir} send ${resources.cert}
-| @${host}:${ssl.dir} send ${resources.key}
-| #${host}:${install.dir} run ${java} -jar reload-ssl.jar --dir ${ssl.dir} --port ${service.port}
-| #${host}:${install.dir} run ${java} -jar verify-ssl.jar --host ${host} --port ${service.port}

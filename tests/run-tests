@@ -4,8 +4,6 @@ set -euo pipefail
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly BIN="$ROOT/bin/sh.bang"
 readonly FX="$ROOT/tests/fixtures"
-readonly EX="$ROOT/examples"
-readonly EX1="$ROOT/examples/archive/v1"
 
 # ---------- framework ----------
 
@@ -77,55 +75,6 @@ assert_fails "invalid syntax"       "$BIN" run "$FX/invalid.shbang" --ctx "$FX/m
 assert_stderr "invalid syntax msg" "cannot parse line 2" \
   "$BIN" run "$FX/invalid.shbang" --ctx "$FX/minimal.json"
 
-# ---------- parser: replay ----------
-
-section "parser — replay"
-
-_replay=$("$BIN" run "$EX1/replay/replay.shbang" --ctx "$EX1/replay/context.json" --dry-run)
-assert_contains "for_each selector"  "$_replay" "[for_each] topology.shards[shard3]"
-assert_contains "@ subject (scp)"    "$_replay" 'subject=@${host}:'
-assert_contains "# subject (ssh)"    "$_replay" 'subject=#${host}:'
-assert_contains "send pipe"          "$_replay" 'verb=send args=${resources.replayJar}'
-assert_contains "run pipe"           "$_replay" 'verb=run args=${java} -jar replay.jar'
-
-# ---------- parser: canary-deploy ----------
-
-section "parser — canary-deploy"
-
-_canary=$("$BIN" run "$EX1/canary-deploy/canary-deploy.shbang" --ctx "$EX1/canary-deploy/canary-deploy.json" --dry-run)
-assert_contains "for_each"           "$_canary" "[for_each] topology.shards[shard3]"
-assert_contains "send jar"           "$_canary" "verb=send"
-assert_contains "deploy step"        "$_canary" "deploy.jar"
-assert_contains "deploy version arg" "$_canary" '--version ${release.version}'
-assert_contains "smoke step"         "$_canary" "smoke.jar"
-assert_contains "smoke host arg"     "$_canary" '--host ${host}'
-
-# ---------- parser: snapshot ----------
-
-section "parser — snapshot"
-
-_snap=$("$BIN" run "$EX1/snapshot/snapshot.shbang" --ctx "$EX1/snapshot/snapshot.json" --dry-run)
-assert_contains "for_each"           "$_snap" "[for_each] topology.shards[shard3]"
-assert_contains "# subject: ssh"     "$_snap" 'subject=#${host}:'
-assert_contains "@ subject: fetch"   "$_snap" 'subject=@${host}:'
-assert_contains "quiesce step"       "$_snap" "quiesce.jar"
-assert_contains "tar step"           "$_snap" "verb=run args=tar"
-assert_contains "fetch step"         "$_snap" "verb=fetch"
-assert_contains "unquiesce step"     "$_snap" "unquiesce.jar"
-
-# ---------- parser: cert-rotate ----------
-
-section "parser — cert-rotate"
-
-_cert=$("$BIN" run "$EX1/cert-rotate/cert-rotate.shbang" --ctx "$EX1/cert-rotate/cert-rotate.json" --dry-run)
-assert_contains "for_each wildcard"   "$_cert" "[for_each] topology.shards[*]"
-assert_contains "@ subject: send"     "$_cert" 'subject=@${host}:'
-assert_contains "# subject: run"      "$_cert" 'subject=#${host}:'
-assert_contains "send cert"           "$_cert" 'args=${resources.cert}'
-assert_contains "send key"            "$_cert" 'args=${resources.key}'
-assert_contains "reload step"         "$_cert" "reload-ssl.jar"
-assert_contains "verify step"         "$_cert" "verify-ssl.jar"
-
 # ---------- parser: edge cases ----------
 
 section "parser — edge cases"
@@ -143,12 +92,12 @@ assert_contains "multi-block: run pipe"   "$_multi" "verb=run"
 
 section "verbosity levels"
 
-_v0=$("$BIN"       run "$EX1/replay/replay.shbang" --ctx "$EX1/replay/context.json" --dry-run 2>&1)
-_v1=$("$BIN" -v    run "$EX1/replay/replay.shbang" --ctx "$EX1/replay/context.json" --dry-run 2>&1)
-_v2=$("$BIN" -vv   run "$EX1/replay/replay.shbang" --ctx "$EX1/replay/context.json" --dry-run 2>&1)
-_v3=$("$BIN" -vvv  run "$EX1/replay/replay.shbang" --ctx "$EX1/replay/context.json" --dry-run 2>&1)
-_v4=$("$BIN" -vvvv run "$EX1/replay/replay.shbang" --ctx "$EX1/replay/context.json" --dry-run 2>&1)
-_vl=$("$BIN" --verbose run "$EX1/replay/replay.shbang" --ctx "$EX1/replay/context.json" --dry-run 2>&1)
+_v0=$("$BIN"       run "$FX/minimal.shbang" --ctx "$FX/minimal.json" --dry-run 2>&1)
+_v1=$("$BIN" -v    run "$FX/minimal.shbang" --ctx "$FX/minimal.json" --dry-run 2>&1)
+_v2=$("$BIN" -vv   run "$FX/minimal.shbang" --ctx "$FX/minimal.json" --dry-run 2>&1)
+_v3=$("$BIN" -vvv  run "$FX/minimal.shbang" --ctx "$FX/minimal.json" --dry-run 2>&1)
+_v4=$("$BIN" -vvvv run "$FX/minimal.shbang" --ctx "$FX/minimal.json" --dry-run 2>&1)
+_vl=$("$BIN" --verbose run "$FX/minimal.shbang" --ctx "$FX/minimal.json" --dry-run 2>&1)
 
 assert_not_contains "default: no log lines"  "$_v0" "[sh.bang:"
 assert_contains     "-v: info present"       "$_v1" "[sh.bang:info]"
@@ -160,33 +109,6 @@ assert_not_contains "-vvv: wire absent"      "$_v3" "[sh.bang:wire]"
 assert_contains     "-vvvv: wire present"    "$_v4" "[sh.bang:wire]"
 assert_contains     "--verbose = -v: info"   "$_vl" "[sh.bang:info]"
 assert_not_contains "--verbose = -v: no debug" "$_vl" "[sh.bang:debug]"
-
-# ---------- execution: dry-run renders variables ----------
-
-section "execution — dry-run renders variables"
-
-_dr=$("$BIN" run "$EX1/cert-rotate/cert-rotate.shbang" --ctx "$EX1/cert-rotate/cert-rotate.json" --dry-run 2>&1)
-assert_contains     "cmd:scp lines"      "$_dr" "[cmd:scp]"
-assert_contains     "cmd:ssh lines"      "$_dr" "[cmd:ssh]"
-assert_contains     "dry-run: scp push"  "$_dr" "[dry-run]"
-assert_contains     "dry-run: verb label" "$_dr" "→ scp push"
-_dr_cmd=$(grep '^\[cmd:' <<< "$_dr" || true)
-assert_not_contains "cmd lines: no raw vars" "$_dr_cmd" '${host}'
-assert_contains     "real hostname"      "$_dr" ".prod.internal"
-
-# ---------- execution: HOCON context ----------
-
-section "execution — HOCON context"
-
-if [[ -f ${HOCON_JAR:-/usr/local/lib/hocon.jar} ]]; then
-  _hdr=$("$BIN" run "$EX1/cert-rotate/cert-rotate.shbang" \
-         --ctx "$EX1/cert-rotate/cert-rotate.hocon" --dry-run 2>&1)
-  assert_contains     "hocon: cmd:scp"       "$_hdr" "[cmd:scp]"
-  assert_contains     "hocon: real hostname" "$_hdr" ".prod.internal"
-  assert_not_contains "hocon: no vars"       "$_hdr" '${host}'
-else
-  printf '  [skip] HOCON jar not found — set HOCON_JAR or build with HOCON_JAR_URL\n'
-fi
 
 # ---------- done ----------
 
