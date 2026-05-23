@@ -1,5 +1,0 @@
-// Canary deploy: push new service JAR to shard3 only and smoke-test before wider rollout
-for_each ${topology.shards[shard3]}
-| @${host}:${install.dir}/versions send ${resources.serviceJar}
-| #${host}:${install.dir} run ${java} -jar deploy.jar --version ${release.version} --shard ${shard.id}
-| #${host}:${install.dir} run ${java} -jar smoke.jar --host ${host} --port ${service.port} --timeout 30

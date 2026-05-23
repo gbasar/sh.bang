@@ -1,9 +1,0 @@
-{
-  "verbs": {
-    "list": {
-      "kind": "exec",
-      "safe": "posix",
-      "argv": ["ls", "-lt"]
-    }
-  }
-}

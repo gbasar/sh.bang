@@ -9,7 +9,10 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(timeout 5 bash \"C:/d/i/py1/devprojects/sh.bang/bin/sh.bang\" run \"C:/d/i/py1/devprojects/sh.bang/examples/replay.shbang\" --ctx \"C:/d/i/py1/devprojects/sh.bang/examples/context.json\" --dry-run)",
       "Bash(timeout 5 bash \"C:/d/i/py1/devprojects/sh.bang/bin/sh.bang\" -vvvv run \"C:/d/i/py1/devprojects/sh.bang/examples/replay.shbang\" --ctx \"C:/d/i/py1/devprojects/sh.bang/examples/context.json\" --dry-run)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --title 'docs: design decisions, archive v1 examples, firewalled-dr' --body ' *)"
     ]
   }
 }

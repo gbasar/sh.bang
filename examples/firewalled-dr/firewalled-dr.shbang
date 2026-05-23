@@ -1,0 +1,16 @@
+#! Deploy replay jar to all nodes
+
+
+#! Send jar and run on primary
+
+for_each ${trading.shard[*]}
+| @${primary.host}:${install.directory} send ${resources.replayJar}
+| @${primary.host}:${install.directory} run java -jar replay.jar
+
+
+#! Send jar and run on DR (firewalled)
+
+for_each ${trading.shard[*]}
+| for_each ${dr.host}
+  | @${dr.host}:${dr.directory} send ${resources.replayJar}
+  | @${dr.host}:${dr.directory} run java -jar replay.jar
