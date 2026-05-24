@@ -12,12 +12,27 @@ import java.util.*;
  * prints the thread, location, and local variables, then resumes. Ctrl+C detaches.
  *
  * Usage:
- *   java --add-modules jdk.jdi -jar jdi-attacher.jar \
- *        <host:port> <class> <method> [--condition <var>=<value>]
+ *   java --add-modules jdk.jdi -jar jdi-attacher.jar <host:port> \
+ *        [--class <class>] [--method <method>] [--condition <expr>=<value>]
  *
- * Example:
- *   java --add-modules jdk.jdi -jar jdi-attacher.jar \
- *        localhost:5005 OrderEventHandler process --condition orderId=ORD-12345
+ * Examples:
+ *   # break on class load
+ *   jdi-attacher localhost:5005 --class OrderEventHandler
+ *
+ *   # break on method entry
+ *   jdi-attacher localhost:5005 --class OrderEventHandler --method process
+ *
+ *   # conditional — local variable
+ *   jdi-attacher localhost:5005 --class OrderEventHandler --method process \
+ *                --condition orderId=ORD-12345
+ *
+ *   # conditional — field on object parameter
+ *   jdi-attacher localhost:5005 --class TradeEventHandler --method process \
+ *                --condition m.tradeId=TRD-12345
+ *
+ *   # conditional — deep field chain
+ *   jdi-attacher localhost:5005 --class TradeEventHandler --method process \
+ *                --condition m.order.instrumentId=TSLA
  *
  * Notes:
  *   - Requires JDK (not just JRE) — com.sun.jdi is in the jdk.jdi module.
@@ -30,29 +45,41 @@ import java.util.*;
 public class JdiAttacher {
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 3) {
-            System.err.println("Usage: JdiAttacher <host:port> <class> <method> [--condition <var>=<value>]");
-            System.err.println("Example: JdiAttacher localhost:5005 OrderEventHandler process --condition orderId=ORD-12345");
+        if (args.length < 2) {
+            System.err.println("Usage: JdiAttacher <host:port> [--class <class>] [--method <method>] [--condition <expr>=<value>]");
             System.exit(1);
         }
 
         String[] hostPort    = args[0].split(":", 2);
         String host          = hostPort[0];
         int    port          = Integer.parseInt(hostPort[1]);
-        String targetClass   = args[1];
-        String targetMethod  = args[2];
-        String condVar       = null;
+        String targetClass   = null;
+        String targetMethod  = null;
+        String condExpr      = null;
         String condValue     = null;
 
-        for (int i = 3; i < args.length - 1; i++) {
-            if ("--condition".equals(args[i])) {
-                String[] kv = args[i + 1].split("=", 2);
-                condVar   = kv[0];
-                condValue = kv.length > 1 ? kv[1] : "";
+        for (int i = 1; i < args.length - 1; i++) {
+            switch (args[i]) {
+                case "--class"     -> targetClass  = args[++i];
+                case "--method"    -> targetMethod = args[++i];
+                case "--condition" -> {
+                    String[] kv = args[++i].split("=", 2);
+                    condExpr  = kv[0];
+                    condValue = kv.length > 1 ? kv[1] : "";
+                }
             }
         }
 
-        final String fCondVar   = condVar;
+        if (targetClass == null) {
+            System.err.println("[jdi] error: --class is required");
+            System.exit(1);
+        }
+        if (condExpr != null && targetMethod == null) {
+            System.err.println("[jdi] error: --condition requires --method");
+            System.exit(1);
+        }
+
+        final String fCondExpr  = condExpr;
         final String fCondValue = condValue;
 
         // ---- connect --------------------------------------------------------
@@ -66,7 +93,7 @@ public class JdiAttacher {
         params.get("host").setValue(host);
         params.get("port").setValue(String.valueOf(port));
 
-        System.out.println("[jdi] connecting to " + args[0] + "...");
+
         VirtualMachine vm = connector.attach(params);
         System.out.println("[jdi] connected: " + vm.name() + " (JVM " + vm.version() + ")");
 
@@ -82,9 +109,14 @@ public class JdiAttacher {
         BreakpointRequest[] bpr = {null};
         List<ReferenceType> loaded = vm.classesByName(targetClass);
         if (!loaded.isEmpty()) {
-            bpr[0] = armBreakpoint(erm, loaded.get(0), targetMethod, condVar, condValue);
+            if (targetMethod != null) {
+                bpr[0] = armBreakpoint(erm, loaded.get(0), targetMethod, condExpr, condValue);
+            } else {
+                System.out.println("[jdi] class already loaded: " + loaded.get(0).name());
+            }
         } else {
-            System.out.println("[jdi] " + targetClass + " not yet loaded — breakpoint will arm on class prepare");
+            System.out.println("[jdi] " + targetClass + " not yet loaded — will report on class prepare"
+                    + (targetMethod != null ? " and arm breakpoint" : ""));
         }
 
         vm.resume();
@@ -108,12 +140,13 @@ public class JdiAttacher {
 
             for (Event e : events) {
                 if (e instanceof ClassPrepareEvent cpe) {
-                    if (bpr[0] == null) {
-                        bpr[0] = armBreakpoint(erm, cpe.referenceType(), targetMethod, condVar, condValue);
+                    System.out.println("[jdi] class loaded: " + cpe.referenceType().name());
+                    if (targetMethod != null && bpr[0] == null) {
+                        bpr[0] = armBreakpoint(erm, cpe.referenceType(), targetMethod, condExpr, condValue);
                     }
 
                 } else if (e instanceof BreakpointEvent be) {
-                    if (fCondVar != null && !conditionMet(be.thread(), fCondVar, fCondValue)) {
+                    if (fCondExpr != null && !conditionMet(be.thread(), fCondExpr, fCondValue)) {
                         // condition not satisfied — resume silently
                     } else {
                         printHit(be);
@@ -133,7 +166,7 @@ public class JdiAttacher {
     private static BreakpointRequest armBreakpoint(EventRequestManager erm,
                                                     ReferenceType rt,
                                                     String methodName,
-                                                    String condVar,
+                                                    String condExpr,
                                                     String condValue) {
         List<Method> methods = rt.methodsByName(methodName);
         if (methods.isEmpty()) {
@@ -145,18 +178,38 @@ public class JdiAttacher {
         bpr.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
         bpr.enable();
 
-        String cond = condVar != null ? "  condition: " + condVar + "=" + condValue : "";
+        String cond = condExpr != null ? "  condition: " + condExpr + "=" + condValue : "";
         System.out.println("[jdi] breakpoint armed: " + rt.name() + "." + methodName + "()" + cond);
         System.out.println("[jdi] waiting for hit...");
         return bpr;
     }
 
-    private static boolean conditionMet(ThreadReference thread, String varName, String expected) {
+    /**
+     * Evaluates a condition of the form "expr=value" against the current frame.
+     *
+     * expr can be:
+     *   orderId              — local variable / parameter (String or primitive)
+     *   m.tradeId            — field on a local object parameter
+     *   m.order.instrumentId — arbitrarily deep field chain
+     */
+    private static boolean conditionMet(ThreadReference thread, String expr, String expected) {
         try {
             StackFrame frame = thread.frame(0);
-            LocalVariable lv = frame.visibleVariableByName(varName);
+            String[] parts = expr.split("\\.", -1);
+
+            // resolve the root local variable
+            LocalVariable lv = frame.visibleVariableByName(parts[0]);
             if (lv == null) return false;
             Value val = frame.getValue(lv);
+
+            // walk any remaining field segments
+            for (int i = 1; i < parts.length; i++) {
+                if (!(val instanceof ObjectReference obj)) return false;
+                Field field = obj.referenceType().fieldByName(parts[i]);
+                if (field == null) return false;
+                val = obj.getValue(field);
+            }
+
             String actual = val instanceof StringReference sr ? sr.value() : String.valueOf(val);
             return expected.equals(actual);
         } catch (Exception ex) {
