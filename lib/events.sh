@@ -76,23 +76,23 @@ console_parser_pipe() {
 
 console_parser_label() {
   local -n event=$1
-  printf '\n--- %s ---\n' "${event[text]}"
+  printf '\n[ %s ]\n' "${event[text]}"
 }
 
 console_parser_local() {
   local -n event=$1
-  printf '[local] %s -> %s\n' "${event[cmd]}" "${event[capture]}"
+  printf '  [local] %s -> %s\n' "${event[cmd]}" "${event[capture]}"
 }
 
 console_cmd_scp() {
   local -n event=$1
-  printf '→ scp  %s:%s  %s\n' \
+  printf '  → scp  %s:%s  %s\n' \
     "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
 console_cmd_ssh() {
   local -n event=$1
-  printf '→ ssh  %s:%s  %s\n' \
+  printf '  → ssh  %s:%s  %s\n' \
     "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
