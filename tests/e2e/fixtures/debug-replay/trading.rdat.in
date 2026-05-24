@@ -1,0 +1,8 @@
+ORD-00001 NewOrderSingle side=BUY qty=100 price=99.50 instrument=AAPL
+ORD-00002 NewOrderSingle side=SELL qty=50 price=100.00 instrument=AAPL
+ORD-00003 NewOrderSingle side=BUY qty=200 price=45.25 instrument=MSFT
+ORD-12345 NewOrderSingle side=BUY qty=500 price=150.00 instrument=TSLA
+ORD-00004 NewOrderSingle side=SELL qty=75 price=151.00 instrument=TSLA
+ORD-00005 ExecutionReport orderId=ORD-12345 status=PARTIAL_FILL fillQty=200
+ORD-00006 NewOrderSingle side=BUY qty=300 price=200.00 instrument=NVDA
+ORD-00007 ExecutionReport orderId=ORD-12345 status=FILLED fillQty=300

@@ -14,18 +14,20 @@
 //   staging.jumphost                   -- jumphost hostname
 //   archive.date                       -- date tag e.g. 20260520
 
+#! Create Std blackbird layout
+# maybe our first gap, we def don't want to do thus fir every shard also we are making the drecotry layout somehwee perhaps not specificed in the config right a jummphost
 for_each ${trading.shard[*]}
 | #${staging.jumphost}:${staging.root} run mkdir -p ${shard}/trading/app/trading/{bin,lib} ${shard}/trading/config ${shard}/trading/data/trading/{archive,txn-log} ${shard}/trading/log/trading/archive
 
-#! Pull binaries and config from prod shard
-
+#! Pull binaries and config from prod shard (no space between shebang ands ectio, i think that was a misunderstanding)A
+# def not from each right
 for_each ${trading.shard[*]}
 | @${host}:${install.directory}/${shard}/trading/app/trading/lib fetch ${staging.root}/${shard}/trading/app/trading/lib/
 | @${host}:${install.directory}/${shard}/trading/app/trading/bin fetch ${staging.root}/${shard}/trading/app/trading/bin/
 | @${host}:${install.directory}/${shard}/trading/config/environment.conf fetch ${staging.root}/${shard}/trading/config/
 
 #! Pull rdat archive from prod and unpack to txn-log
-
+# why the @vs #?
 for_each ${trading.shard[*]}
 | @${host}:${install.directory}/${shard}/trading/data/trading/archive/trading-data-${archive.date}*.tar.gz fetch ${staging.root}/${shard}/trading/data/trading/archive/
 | #${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/

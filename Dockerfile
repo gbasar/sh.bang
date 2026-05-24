@@ -36,11 +36,17 @@ ENTRYPOINT ["bin/sh.bang"]
 # ---- e2e (test only — not for production use) ----
 FROM client AS e2e
 
-# Recompile replay-stub.jar targeting JDK 17
+# Build replay-stub.jar
 RUN cd /app/tools/replay-stub && \
     javac --release 17 -encoding UTF-8 ReplayStub.java && \
     jar cfe replay-stub.jar ReplayStub ReplayStub.class && \
     rm -f ReplayStub.class
+
+# Build blackbird-stub.jar
+RUN cd /app/tools/blackbird-stub && \
+    javac --release 17 -encoding UTF-8 BlackbirdStub.java OrderEventHandler.java && \
+    jar cfe blackbird-stub.jar BlackbirdStub BlackbirdStub.class OrderEventHandler.class && \
+    rm -f BlackbirdStub.class OrderEventHandler.class
 
 # Bake e2e test private key
 RUN mkdir -p /root/.ssh && \

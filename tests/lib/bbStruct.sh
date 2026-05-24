@@ -125,6 +125,51 @@ SCRIPT
 }
 
 # ---------------------------------------------------------------------------
+# bb_create_debug_binaries <host> <install_dir> <shard> <jar_path> <jdwp_port> [ssh_key]
+#
+# Like bb_create_binaries but start injects JDWP (suspend=n) and runs the
+# given jar.  The app starts normally and the debugger can attach at any time.
+# Use with blackbird-stub.jar for the debug-replay scenario.
+# ---------------------------------------------------------------------------
+bb_create_debug_binaries() {
+  local host=$1 install_dir=$2 shard=$3 jar_path=$4 jdwp_port=$5 key="${6:-}"
+  local bin="${install_dir}/${shard}/trading/app/trading/bin"
+  local lib="${install_dir}/${shard}/trading/app/trading/lib"
+  local txn_log="${install_dir}/${shard}/trading/data/trading/txn-log"
+
+  echo "[bbStruct] create debug binaries: deploy@${host}:${bin}  jdwp=*:${jdwp_port}"
+
+  # upload the jar into lib/
+  _bb_scp "$jar_path" "deploy@${host}:${lib}/blackbird-stub.jar" "$key"
+
+  _bb_ssh "$host" "$key" "
+    cat > ${bin}/start <<SCRIPT
+#!/usr/bin/env bash
+echo \"[start] ${shard} starting with JDWP on port ${jdwp_port}\"
+exec java \\
+  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${jdwp_port} \\
+  -jar ${lib}/blackbird-stub.jar \\
+  ${txn_log}
+SCRIPT
+
+    cat > ${bin}/stop <<'SCRIPT'
+#!/usr/bin/env bash
+pkill -f blackbird-stub.jar || true
+echo \"stopped\"
+SCRIPT
+
+    cat > ${bin}/restart <<'SCRIPT'
+#!/usr/bin/env bash
+\$(dirname \$0)/stop
+sleep 1
+\$(dirname \$0)/start
+SCRIPT
+
+    chmod +x ${bin}/start ${bin}/stop ${bin}/restart
+  "
+}
+
+# ---------------------------------------------------------------------------
 # bb_create_archive <host> <install_dir> <shard> <date_tag> <local_fixture_dir> [ssh_key]
 #
 # Packages <local_fixture_dir> into a dated tar.gz, uploads to
