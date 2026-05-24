@@ -34,6 +34,31 @@ Remote meanings:
 
 Users should not write `ssh`, `scp`, or `cd` in normal playbooks.
 
+## HOCON context formats
+
+Real-world deployments often have different HOCON structures across environments
+(prod vs SIT). sh.bang handles this transparently — the playbook never changes,
+only the context file passed at runtime.
+
+The HOCON self-reference alias is the trick that makes this work:
+
+```hocon
+// SIT format — numbered instances, aliased so selector still works
+trading {
+  shard = ${trading.instances}
+  instances { 1 { ... } 2 { ... } }
+}
+
+// Prod format — named shards directly
+trading {
+  shard { 4 { ... } dr { ... } }
+}
+```
+
+After HOCON → JSON conversion, both expose `trading.shard[*]` — the same selector
+works against both. See `examples/replay/trading1.hocon` (prod) and
+`examples/replay/trading2.hocon` (SIT) as reference.
+
 ## Routing And Events
 
 The runner should feel like a small command router, not a pile of inline Bash branches.

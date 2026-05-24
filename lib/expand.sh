@@ -15,8 +15,8 @@ selector_to_jq() {
   local result
   result=$(printf '.%s' "$sel" \
     | sed 's/\[\*\]/[]/g; s/\[\([^*][^]]*\)\]/["\1"]/g')
-  # if no explicit [] iteration, append [] so for_each always iterates
-  [[ $result == *'[]'* ]] || result="${result}[]"
+  # only auto-append [] if there are no brackets at all (bare path, no selector)
+  [[ $result == *'['* ]] || result="${result}[]"
   printf '%s' "$result"
 }
 
@@ -28,27 +28,50 @@ render_vars() {
   while [[ $result =~ \$\{([^}]+)\} ]]; do
     local path=${BASH_REMATCH[1]}
     local value
-    value=$(jq -r ".${path} // empty" <<< "$node_json" 2>/dev/null || true)
+    # 1. try the shard node
+    value=$(MSYS_NO_PATHCONV=1 jq -r ".${path} // empty" <<< "$node_json" 2>/dev/null || true)
+    # 2. fall back to full context JSON (top-level fields like runtime.javaHome)
+    if [[ -z $value ]]; then
+      value=$(MSYS_NO_PATHCONV=1 jq -r ".${path} // empty" "${SHBANG_RT[ctx]}" 2>/dev/null || true)
+    fi
+    # 3. fall back to SHBANG_RT (captured locals like tradeFilter)
+    if [[ -z $value && -n ${SHBANG_RT[$path]:-} ]]; then
+      value=${SHBANG_RT[$path]}
+    fi
     result="${result/"\${${path}}"/"${value}"}"
   done
 
   printf '%s' "$result"
 }
 
-# ---------- expand listener ----------
+# ---------- expand handlers ----------
+
+declare -A EXPAND_HANDLERS=(
+  [parser.for_each]=expand_for_each
+  [parser.pipe]=expand_pipe
+  [parser.local]=expand_local
+)
 
 event_expand() {
   local -n ex_event=$1
-  local type=${ex_event[type]}
+  local fn=${EXPAND_HANDLERS[${ex_event[type]}]:-}
+  [[ -n $fn ]] || return 0
+  "$fn" ex_event
+}
 
-  case $type in
-    parser.for_each)
-      SHBANG_RT[_expand_selector]=${ex_event[selector]}
-      ;;
-    parser.pipe)
-      expand_pipe ex_event
-      ;;
-  esac
+expand_for_each() {
+  local -n ef_event=$1
+  SHBANG_RT[_expand_selector]=${ef_event[selector]}
+}
+
+expand_local() {
+  local -n el_event=$1
+  local cmd
+  cmd=$(render_vars "${el_event[cmd]}" "{}")
+  local result
+  result=$(bash -c "$cmd")
+  SHBANG_RT[${el_event[capture]}]=$result
+  log_debug "local: captured ${el_event[capture]}=${result}"
 }
 
 expand_pipe() {
@@ -68,7 +91,7 @@ expand_pipe() {
     subject=$(render_vars "${ep_event[subject]}" "$node_json")
     verb="${ep_event[verb]}"
     args=$(render_vars "${ep_event[args]}"    "$node_json")
-    user=$(jq -r '.user.name // "deploy"'    <<< "$node_json")
+    user=$(jq -r 'if .user | type == "object" then .user.name else "deploy" end' <<< "$node_json")
 
     local prefix=${subject:0:1}
     local host_path=${subject:1}

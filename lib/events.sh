@@ -11,6 +11,7 @@ declare -A CONSOLE_EVENT_FORMATTERS=(
   [run.loaded]=console_run_loaded
   [parser.for_each]=console_parser_for_each
   [parser.pipe]=console_parser_pipe
+  [parser.local]=console_parser_local
   [cmd.scp]=console_cmd_scp
   [cmd.ssh]=console_cmd_ssh
 )
@@ -75,6 +76,11 @@ console_parser_pipe() {
     "${event[subject]}" \
     "${event[verb]}" \
     "${event[args]}"
+}
+
+console_parser_local() {
+  local -n event=$1
+  printf '[local] %s -> %s\n' "${event[cmd]}" "${event[capture]}"
 }
 
 console_cmd_scp() {

@@ -1,4 +1,41 @@
-#! Deploy replay jar to all nodes
+// ah that'ps the disconenecti I was thinknig th is was exmple.md
+// which is knid of wanted i wanted le3t's do that for now andwe'll  
+// make to the sacutal sbang later
+
+// Let's reserve the shebag actual steps
+
+// Deploy new version
+//   1. Push new version to each 
+
+
+#! Push new versions
+
+#!  Primary and backup
+for_each ${trading.shard[*]}
+  | @${primary.host}:${install.directory}/app/${appName}/lib send ${resources.replayJar}
+  | @${failvoer.host}:${install.directory}/app/${appName}/lib send ${resources.replayJar}
+  #! backup 
+| for_each ${dr.host}
+  | @${dr.host}:${dr.directory} send ${resources.replayJar}
+  | @${dr.host}:${dr.directory} run java -jar replay.jar
+
+
+# Yuo know what's really cool claude i just realized this is totalldifferent~
+#
+#! Push new version (remember to do dr first)
+#!  Primary and backup
+for_each ${trading.shard[*]}
+| #! DR first 
+| for_each ${dr.host}
+| | @${dr.host}:${dr.directory}/app/${appName}/lib send ${resources.replayJar}
+| | @${dr.host}:${dr.directory}/app/${appName}/bin restart.sh
+|
+| #! Primary / Failover 
+| #   (now that dr is done thanks to our (depth first  :) )
+| @${primary.host}:${install.directory}/app/${appName}/lib send ${resources.replayJar}
+| @${failvoer.host}:${install.directory}/app/${appName}/lib send ${resources.replayJar}
+
+
 
 
 #! Send jar and run on primary
@@ -10,7 +47,4 @@ for_each ${trading.shard[*]}
 
 #! Send jar and run on DR (firewalled)
 
-for_each ${trading.shard[*]}
-| for_each ${dr.host}
-  | @${dr.host}:${dr.directory} send ${resources.replayJar}
-  | @${dr.host}:${dr.directory} run java -jar replay.jar
+
