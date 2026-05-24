@@ -92,13 +92,13 @@ console_cmd_scp() {
     fetch) arrow='↓' ;;
     *)     arrow='·' ;;
   esac
-  printf '  \e[1;34mscp %s\e[0m  \e[1;37m%s\e[0m\e[2;3m:%s\e[0m  %s\n' \
+  printf '  \e[1;34mscp %s\e[0m  \e[1;37m@%s\e[0m\e[2;3m:%s\e[0m  %s\n' \
     "$arrow" "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
 console_cmd_ssh() {
   local -n event=$1
-  printf '  \e[1;35mssh →\e[0m  \e[1;37m%s\e[0m\e[2;3m:%s\e[0m  %s\n' \
+  printf '  \e[1;35mssh →\e[0m  \e[1;37m@%s\e[0m\e[2;3m:%s\e[0m  %s\n' \
     "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
