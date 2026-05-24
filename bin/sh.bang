@@ -6,6 +6,7 @@ readonly SHBANG_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly SHBANG_CLI_SPEC="$SHBANG_HOME/spec/cli.json"
 
 source "$SHBANG_HOME/lib/log.sh"
+source "$SHBANG_HOME/lib/console.sh"
 source "$SHBANG_HOME/lib/events.sh"
 source "$SHBANG_HOME/lib/parser.sh"
 source "$SHBANG_HOME/lib/router.sh"

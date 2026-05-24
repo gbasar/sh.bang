@@ -76,12 +76,13 @@ console_parser_pipe() {
 
 console_parser_label() {
   local -n event=$1
-  printf '\n\e[1;36m[ %s ]\e[0m\n' "${event[text]}"
+  printf '\n'
+  fmt_label "${event[text]}"
 }
 
 console_parser_local() {
   local -n event=$1
-  printf '  \e[1;33m$\e[0m  \e[2m%s → %s\e[0m\n' "${event[cmd]}" "${event[capture]}"
+  fmt_local "${event[cmd]}" "${event[capture]}"
 }
 
 console_cmd_scp() {
@@ -92,14 +93,12 @@ console_cmd_scp() {
     fetch) arrow='↓' ;;
     *)     arrow='·' ;;
   esac
-  printf '  \e[1;34mscp %s\e[0m  \e[1;37m@%s\e[0m\e[2;3m:%s\e[0m  %s\n' \
-    "$arrow" "${event[host]}" "${event[path]}" "${event[args]}"
+  fmt_scp "$arrow" "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
 console_cmd_ssh() {
   local -n event=$1
-  printf '  \e[1;35mssh →\e[0m  \e[1;37m@%s\e[0m\e[2;3m:%s\e[0m  %s\n' \
-    "${event[host]}" "${event[path]}" "${event[args]}"
+  fmt_ssh "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
 console_default() {
