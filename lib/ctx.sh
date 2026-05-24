@@ -86,11 +86,12 @@ resolve_resources() {
     if [[ $uri == file://* ]]; then
       scheme=file
       path=${uri#file://}
-      # relative paths resolve from CWD (repo root), not the playbook dir
-      if [[ $path != /* ]]; then
-        path="$PWD/$path"
+      # keep relative paths relative — avoids MSYS absolute path mangling on Windows
+      if [[ $path == /* ]]; then
+        [[ -f $path ]] || die "resource '$name': file not found: $path"
+      else
+        [[ -f $path ]] || die "resource '$name': file not found: $path (relative to $PWD)"
       fi
-      [[ -f $path ]] || die "resource '$name': file not found: $path"
       log_debug "  $name → local $path"
       SHBANG_RT[$name]=$path
 

@@ -8,7 +8,7 @@ resources {
 
 #! Prepare trade filter
 
-$ run cat examples/replay/trades.csv | tr '\n' ',' | sed 's/,$//' -> tradeFilter
+$ run cat examples/replay/trades.csv | tr -d '\r' | tr '\n' ',' | sed 's/,$//' -> tradeFilter
 
 #! Send jar and run replay on all shards
 
