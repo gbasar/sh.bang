@@ -1,8 +1,16 @@
-ORD-00001 NewOrderSingle side=BUY qty=100 price=99.50 instrument=AAPL
-ORD-00002 NewOrderSingle side=SELL qty=50 price=100.00 instrument=AAPL
-ORD-00003 NewOrderSingle side=BUY qty=200 price=45.25 instrument=MSFT
-ORD-12345 NewOrderSingle side=BUY qty=500 price=150.00 instrument=TSLA
-ORD-00004 NewOrderSingle side=SELL qty=75 price=151.00 instrument=TSLA
-ORD-00005 ExecutionReport orderId=ORD-12345 status=PARTIAL_FILL fillQty=200
-ORD-00006 NewOrderSingle side=BUY qty=300 price=200.00 instrument=NVDA
-ORD-00007 ExecutionReport orderId=ORD-12345 status=FILLED fillQty=300
+product_001 StaticData type=EQUITY exchange=LSE name=Vodafone
+product_002 StaticData type=EQUITY exchange=LSE name=Barclays
+product_003 StaticData type=EQUITY exchange=LSE name=HSBC
+product_004 StaticData type=EQUITY exchange=NYSE name=Apple
+product_005 StaticData type=EQUITY exchange=NYSE name=Tesla
+product_006 StaticData type=EQUITY exchange=NYSE name=Nvidia
+product_007 StaticData type=FUTURES exchange=CME name=ES_Dec26
+product_008 StaticData type=FUTURES exchange=CME name=NQ_Dec26
+ORD-00001 NewOrderSingle side=BUY qty=100 price=99.50 instrument=product_001
+ORD-00002 NewOrderSingle side=SELL qty=50 price=100.00 instrument=product_001
+ORD-00003 NewOrderSingle side=BUY qty=200 price=45.25 instrument=product_002
+ORD-12345 NewOrderSingle side=BUY qty=500 price=150.00 instrument=product_005
+ORD-00004 NewOrderSingle side=SELL qty=75 price=151.00 instrument=product_005
+TRD-00001 ExecutionReport orderId=ORD-12345 status=PARTIAL_FILL fillQty=200
+ORD-00005 NewOrderSingle side=BUY qty=300 price=200.00 instrument=product_006
+TRD-00002 ExecutionReport orderId=ORD-12345 status=FILLED fillQty=300

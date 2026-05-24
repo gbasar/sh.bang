@@ -6,12 +6,20 @@ import java.util.concurrent.atomic.AtomicInteger;
  * BluebirdStub — simulates the Bluebird trading application startup sequence.
  *
  * In Bluebird everything arrives via messages — even static reference data.
- * Startup phases (same order as the real app):
+ * All startup events are read from trading.rdat.in in order:
  *
- *   1. Static data load  — StaticDataHandler processes product/instrument records
- *   2. Event sourcing recovery — reads trading.rdat.in if present, replays through
- *      OrderEventHandler and TradeEventHandler to rebuild state (no outbound messages)
- *   3. Ready — waits for live inbound messages (NewOrderSingle, ExecutionReport, etc.)
+ *   Phase 1 — Static data load
+ *     StaticData lines processed by StaticDataHandler (sleeps briefly per record
+ *     to simulate the real app's load time — go get coffee)
+ *
+ *   Phase 2 — Event sourcing recovery
+ *     NewOrderSingle → OrderEventHandler
+ *     ExecutionReport → TradeEventHandler
+ *     (no outbound messages during recovery — state is rebuilt silently)
+ *
+ *   Phase 3 — Ready
+ *     App waits for live inbound messages. JDWP is open; attach debugger at leisure.
+ *     The breakpoint on OrderEventHandler.process() will fire on the very next order.
  *
  * JDWP is NOT baked in. Inject via the start script:
  *   java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 \
@@ -22,7 +30,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class BluebirdStub {
 
-    private static final int STATIC_DATA_PRODUCTS = 20;
     private static final long STATIC_DATA_DELAY_MS = 50;
     private static final long HEARTBEAT_INTERVAL_S = 10;
 
@@ -32,40 +39,25 @@ public class BluebirdStub {
         System.out.println("[bluebird-stub] starting up");
         System.out.println("[bluebird-stub] txn-log: " + txnLogDir);
 
-        // Phase 1 — static data load (all via messages in the real app)
-        loadStaticData();
+        StaticDataHandler staticHandler = new StaticDataHandler();
+        OrderEventHandler orderHandler  = new OrderEventHandler();
+        TradeEventHandler tradeHandler  = new TradeEventHandler();
 
-        // Phase 2 — event sourcing recovery
-        OrderEventHandler orderHandler = new OrderEventHandler();
-        TradeEventHandler tradeHandler = new TradeEventHandler();
-        recover(txnLogDir, orderHandler, tradeHandler);
+        recover(txnLogDir, staticHandler, orderHandler, tradeHandler);
 
-        // Phase 3 — ready, wait for live messages
         ready();
     }
 
     // -------------------------------------------------------------------------
-    // Phase 1: Static data load — all product/instrument data arrives as messages
-    // -------------------------------------------------------------------------
-    private static void loadStaticData() throws InterruptedException {
-        StaticDataHandler handler = new StaticDataHandler();
-        System.out.println("[bluebird-stub] loading static data...");
-        for (int i = 1; i <= STATIC_DATA_PRODUCTS; i++) {
-            String productId = String.format("product_%03d", i);
-            handler.load(productId, "type=EQUITY exchange=LSE");
-            Thread.sleep(STATIC_DATA_DELAY_MS);
-        }
-        System.out.println("[bluebird-stub] static data loaded ("
-                + handler.getLoadedCount() + " products)");
-    }
-
-    // -------------------------------------------------------------------------
-    // Phase 2: Event sourcing recovery from rdat.in
-    // Orders go to OrderEventHandler, execution reports to TradeEventHandler.
+    // Recovery: reads rdat.in top-to-bottom.
+    //   StaticData lines    -> StaticDataHandler  (with artificial delay)
+    //   ExecutionReport     -> TradeEventHandler
+    //   everything else     -> OrderEventHandler
     // -------------------------------------------------------------------------
     private static void recover(String txnLogDir,
+                                StaticDataHandler staticHandler,
                                 OrderEventHandler orderHandler,
-                                TradeEventHandler tradeHandler) throws IOException {
+                                TradeEventHandler tradeHandler) throws Exception {
         Path rdatIn = Paths.get(txnLogDir, "trading.rdat.in");
 
         if (!Files.exists(rdatIn)) {
@@ -73,40 +65,58 @@ public class BluebirdStub {
             return;
         }
 
-        System.out.println("[bluebird-stub] rdat.in detected — recovering state from transaction log...");
-        System.out.println("[bluebird-stub] note: no outbound messages sent during recovery");
+        System.out.println("[bluebird-stub] rdat.in detected — replaying transaction log...");
+        System.out.println("[bluebird-stub] loading static data (grab a coffee)...");
 
-        int count = 0;
+        int orders = 0, trades = 0;
+        boolean staticDone = false;
+
         try (BufferedReader reader = Files.newBufferedReader(rdatIn)) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty()) continue;
 
-                String[] parts = line.split("\\s+", 3);
-                String id      = parts[0];
-                String msgType = parts.length > 1 ? parts[1] : "";
-                String payload = parts.length > 2 ? parts[2] : "";
+                String[] parts   = line.split("\\s+", 3);
+                String id        = parts[0];
+                String msgType   = parts.length > 1 ? parts[1] : "";
+                String payload   = parts.length > 2 ? parts[2] : "";
 
-                System.out.println("  replayed: " + line);
-                if (msgType.startsWith("ExecutionReport")) {
-                    tradeHandler.process(id, payload);
+                if (msgType.equals("StaticData")) {
+                    staticHandler.load(id, payload);
+                    Thread.sleep(STATIC_DATA_DELAY_MS);
                 } else {
-                    // NewOrderSingle and anything else
-                    orderHandler.process(id, payload);
+                    if (!staticDone) {
+                        System.out.println("[bluebird-stub] static data loaded ("
+                                + staticHandler.getLoadedCount() + " records)");
+                        System.out.println("[bluebird-stub] recovering order/trade state...");
+                        System.out.println("[bluebird-stub] note: no outbound messages sent during recovery");
+                        staticDone = true;
+                    }
+                    System.out.println("  replayed: " + line);
+                    if (msgType.startsWith("ExecutionReport")) {
+                        tradeHandler.process(id, payload);
+                        trades++;
+                    } else {
+                        orderHandler.process(id, payload);
+                        orders++;
+                    }
                 }
-                count++;
             }
         }
 
+        if (!staticDone) {
+            // rdat.in contained only static data (or was empty after trim)
+            System.out.println("[bluebird-stub] static data loaded ("
+                    + staticHandler.getLoadedCount() + " records)");
+        }
+
         System.out.println("[bluebird-stub] recovery complete ("
-                + count + " events — "
-                + orderHandler.getProcessedCount() + " orders, "
-                + tradeHandler.getProcessedCount() + " trades)");
+                + orders + " orders, " + trades + " trades)");
     }
 
     // -------------------------------------------------------------------------
-    // Phase 3: Ready — simulate waiting for live inbound messages
+    // Phase 3: Ready — waiting for live inbound messages
     // -------------------------------------------------------------------------
     private static void ready() throws InterruptedException {
         System.out.println("[bluebird-stub] waiting for messages (NewOrderSingle, ExecutionReport, etc.)...");
