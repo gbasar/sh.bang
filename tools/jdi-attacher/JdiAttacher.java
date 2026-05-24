@@ -152,10 +152,8 @@ public class JdiAttacher {
                     if (fCondExpr != null && !conditionMet(be.thread(), fCondExpr, fCondValue)) {
                         // condition not satisfied — resume silently
                     } else {
-                        printHit(be);
+                        printHit(be, fHandOff, host, port);
                         if (fHandOff) {
-                            System.out.println("[jdi] hand-off mode — detaching without resume");
-                            System.out.println("[jdi] app is suspended at breakpoint — attach IntelliJ now");
                             vm.dispose();
                             return;
                         }
@@ -226,7 +224,8 @@ public class JdiAttacher {
         }
     }
 
-    private static void printHit(BreakpointEvent be) throws Exception {
+    private static void printHit(BreakpointEvent be, boolean handOff,
+                                  String host, int port) throws Exception {
         ThreadReference thread = be.thread();
         StackFrame frame = thread.frame(0);
 
@@ -244,6 +243,16 @@ public class JdiAttacher {
         } catch (AbsentInformationException ex) {
             System.out.println("[jdi]   (no variable info — recompile target with javac -g)");
         }
-        System.out.println("[jdi] resuming — waiting for next hit... (Ctrl+C to detach)");
+
+        if (handOff) {
+            System.out.println("[jdi]");
+            System.out.println("[jdi] app suspended — attach your debugger:");
+            System.out.println("[jdi]   host : " + host);
+            System.out.println("[jdi]   port : " + port);
+            System.out.println("[jdi]   IntelliJ: Run > Attach to Process > " + host + ":" + port);
+            System.out.println("[jdi] detaching (app remains suspended)...");
+        } else {
+            System.out.println("[jdi] resuming — waiting for next hit... (Ctrl+C to detach)");
+        }
     }
 }
