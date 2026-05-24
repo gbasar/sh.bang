@@ -18,7 +18,7 @@
 #   3. For each host: scp jar, then one SSH session for all shards
 #
 # Usage:
-#   bash examples/replay/replay-debug-jq.sh /path/to/replay-stub.jar
+#   bash examples/solace-replay/replay-debug-jq.sh /path/to/replay-stub.jar
 #
 # Optional env vars:
 #   SHBANG_SSH_KEY     -- path to SSH private key

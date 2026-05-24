@@ -114,7 +114,7 @@ echo
 echo "  ssh -F $SSH_CONFIG trading-host1"
 echo "  ssh -F $SSH_CONFIG trading-host2"
 echo
-echo "  bin/sh.bang run examples/replay/replay.shbang --ctx examples/replay/environment.json"
+echo "  bin/sh.bang run examples/solace-replay/replay.shbang --ctx examples/solace-replay/environment.json"
 echo
 echo "[playground] tip: 'source bin/playground' to set env vars in your current shell"
 echo "             'bin/playground --stop' to tear down"

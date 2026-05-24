@@ -19,7 +19,7 @@
 #   2. For each shard (read from JSON): scp jar, ssh extract, ssh replay
 #
 # Usage:
-#   bash examples/replay/replay-debug-jq.sh /path/to/replay-stub.jar
+#   bash examples/solace-replay/replay-debug-jq.sh /path/to/replay-stub.jar
 #
 # Optional env vars (set by 'source bin/playground', or export manually):
 #   SHBANG_SSH_KEY     -- path to SSH private key

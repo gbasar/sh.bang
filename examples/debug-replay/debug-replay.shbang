@@ -1,0 +1,42 @@
+#! Create standard directory layout on jumphost
+
+// Reconstruct a hermetic shard environment on the jumphost for debugging.
+// Uses event sourcing: pull the same binary + config + rdat archive from prod,
+// unpack to the standard Blackbird layout, patch for debug mode, and start.
+// The app sees the rdat.in on startup, silently replays to rebuild state,
+// then suspends waiting for a debugger to attach (JDWP on port 5005).
+//
+// Context keys required (see environment.conf):
+//   trading.shard[*].host              -- prod host to pull from
+//   trading.shard[*].install.directory -- prod install root
+//   trading.shard[*].shard             -- shard name (e.g. shard_1)
+//   staging.root                       -- local staging root on jumphost
+//   staging.jumphost                   -- jumphost hostname
+//   archive.date                       -- date tag e.g. 20260520
+
+for_each ${trading.shard[*]}
+| #${staging.jumphost}:${staging.root} run mkdir -p ${shard}/trading/app/trading/{bin,lib} ${shard}/trading/config ${shard}/trading/data/trading/{archive,txn-log} ${shard}/trading/log/trading/archive
+
+#! Pull binaries and config from prod shard
+
+for_each ${trading.shard[*]}
+| @${host}:${install.directory}/${shard}/trading/app/trading/lib fetch ${staging.root}/${shard}/trading/app/trading/lib/
+| @${host}:${install.directory}/${shard}/trading/app/trading/bin fetch ${staging.root}/${shard}/trading/app/trading/bin/
+| @${host}:${install.directory}/${shard}/trading/config/environment.conf fetch ${staging.root}/${shard}/trading/config/
+
+#! Pull rdat archive from prod and unpack to txn-log
+
+for_each ${trading.shard[*]}
+| @${host}:${install.directory}/${shard}/trading/data/trading/archive/trading-data-${archive.date}*.tar.gz fetch ${staging.root}/${shard}/trading/data/trading/archive/
+| #${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
+
+#! Patch for debug mode and start
+
+// Flips MODE to DEBUG in environment.conf and injects JDWP flags into start.
+// The process will suspend on startup waiting for a remote debugger on port 5005.
+// Connect via IntelliJ: Run > Attach to Process > host:5005
+
+for_each ${trading.shard[*]}
+| #${staging.jumphost}:${staging.root}/${shard}/trading/config run sed -i 's/MODE=.*/MODE=DEBUG/' environment.conf
+| #${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run sed -i 's/trading\.main\.Start/trading.main.Start -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005/' start
+| #${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run ./start

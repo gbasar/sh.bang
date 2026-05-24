@@ -2,13 +2,13 @@
 
 resources {
   replayJar = file://tools/replay-stub/replay-stub.jar
-  conf       = file://examples/replay/environment.conf
-  trades     = file://examples/replay/trades.csv
+  conf       = file://examples/solace-replay/environment.conf
+  trades     = file://examples/solace-replay/trades.csv
 }
 
 #! Prepare trade filter
 
-$ run cat examples/replay/trades.csv | tr -d '\r' | tr '\n' ',' | sed 's/,$//' -> tradeFilter
+$ run cat examples/solace-replay/trades.csv | tr -d '\r' | tr '\n' ',' | sed 's/,$//' -> tradeFilter
 
 #! Send jar and run replay on all shards
 
