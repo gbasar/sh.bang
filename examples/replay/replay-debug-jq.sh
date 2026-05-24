@@ -1,27 +1,43 @@
 #!/usr/bin/env bash
 # replay-debug-jq.sh
 #
-# Replicates the exact operations of replay.shbang as raw shell, driven
-# entirely by environment.conf (HOCON) — no hardcoded shard list or paths.
+# Replicates replay.shbang as a plain shell script, driven by environment.conf.
 #
-# Step 0: converts environment.conf → JSON via hocon.jar (Lightbend Config).
-# Step 1: reads all config dynamically with jq.
-# Step 2+: identical SSH/SCP operations to replay-debug-nojq.sh.
+# PURPOSE: side-by-side comparison with replay.shbang.
+#   This version is closer to what sh.bang does internally — it reads the real
+#   config file and iterates shards dynamically.  But notice what is still
+#   missing compared to sh.bang: no dry-run mode, no structured error logging,
+#   no ControlMaster SSH muxing, and any change to the operation sequence
+#   (a new step, a different jar name, a new host) means editing this script.
+#   In sh.bang those changes are a one-line edit to the playbook.
 #
-# Use this to validate that sh.bang and raw shell produce the same result
-# against the live config, and to confirm the HOCON → JSON pipeline works.
-#
-# Prerequisites:
-#   source bin/playground          # sets SHBANG_SSH_KEY + SHBANG_SSH_CONFIG
-#   export HOCON_JAR=/path/to/hocon.jar   # default: /usr/local/lib/hocon.jar
+# Steps:
+#   0. Convert environment.conf (HOCON) -> JSON via hocon.jar
+#   1. Build trade filter from trades.csv
+#   2. For each shard (read from JSON): scp jar, ssh extract, ssh replay
 #
 # Usage:
-#   bash examples/replay/replay-debug-jq.sh
+#   bash examples/replay/replay-debug-jq.sh /path/to/replay-stub.jar
+#
+# Optional env vars (set by 'source bin/playground', or export manually):
+#   SHBANG_SSH_KEY     -- path to SSH private key
+#   SHBANG_SSH_CONFIG  -- SSH config file mapping hostnames to ports
+#   HOCON_JAR          -- path to hocon.jar  (default: /usr/local/lib/hocon.jar)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# ---------------------------------------------------------------------------
+# Args
+# ---------------------------------------------------------------------------
+if [[ $# -lt 1 ]]; then
+  echo "usage: $(basename "$0") /path/to/replay-stub.jar" >&2
+  exit 1
+fi
+
+REPLAY_JAR="$1"
+[[ -f $REPLAY_JAR ]] || { echo "ERROR: jar not found: $REPLAY_JAR" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Locate hocon.jar
@@ -29,68 +45,58 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HOCON_JAR="${HOCON_JAR:-/usr/local/lib/hocon.jar}"
 
 if [[ ! -f $HOCON_JAR ]]; then
-  printf 'ERROR: hocon.jar not found at %s\n' "$HOCON_JAR" >&2
-  printf '       Set HOCON_JAR=/path/to/hocon.jar or build via Docker:\n' >&2
-  printf '         docker compose run --rm test\n' >&2
+  echo "ERROR: hocon.jar not found at $HOCON_JAR" >&2
+  echo "       Set HOCON_JAR=/path/to/hocon.jar or build via: docker compose run --rm test" >&2
   exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Step 0: HOCON → JSON
+# Step 0: HOCON -> JSON
+# In sh.bang this is handled transparently by the resources {} block.
+# Here we do it explicitly so we can see exactly what comes out.
 # ---------------------------------------------------------------------------
-printf '\e[1;36m[ Converting environment.conf → JSON ]\e[0m\n'
-printf '├─ \e[2mhocon.jar: %s\e[0m\n' "$HOCON_JAR"
-printf '├─ \e[2mconf:      %s\e[0m\n' "$SCRIPT_DIR/environment.conf"
+echo ""
+echo "=== Converting environment.conf -> JSON ==="
+echo "hocon.jar : $HOCON_JAR"
+echo "conf      : $SCRIPT_DIR/environment.conf"
 
 ENV_JSON=$(java -jar "$HOCON_JAR" "$SCRIPT_DIR/environment.conf")
 
-printf '└─ \e[1;32mOK\e[0m  (%d bytes)\n' "${#ENV_JSON}"
+echo "OK  (${#ENV_JSON} bytes)"
 
 # ---------------------------------------------------------------------------
 # Config derived from ENV_JSON via jq
+# In sh.bang these are interpolated at playbook parse time from context JSON.
+# Here we call jq explicitly for every value we need.
 # ---------------------------------------------------------------------------
 DEPLOY_USER="deploy"
-INSTALL_BASE="/opt/trading"
-JAVA=$(jq -r '.runtime.javaHome' <<< "$ENV_JSON")
 DATE_TAG="20250522"
-REPLAY_JAR="$REPO_ROOT/tools/replay-stub/replay-stub.jar"
+JAVA=$(jq -r '.runtime.javaHome' <<< "$ENV_JSON")
 
-# Shard IDs in sorted order (keys of .trading.shard)
+# Shard IDs from JSON — no hardcoded list.
+# In sh.bang: for_each ${trading.shard[*]}
 mapfile -t SHARD_IDS < <(jq -r '.trading.shard | keys[]' <<< "$ENV_JSON")
 
 # ---------------------------------------------------------------------------
 # SSH options
+# In sh.bang these are built once in dispatch.sh and applied to every command.
+# ControlMaster omitted here intentionally — shows each connection explicitly.
 # ---------------------------------------------------------------------------
 SSH_OPTS=(
   -o StrictHostKeyChecking=no
   -o BatchMode=yes
   -o KexAlgorithms=ecdh-sha2-nistp256
 )
-# ControlMaster omitted deliberately — debug scripts should show every connection
 
-if [[ -n ${SHBANG_SSH_KEY:-} ]]; then
-  SSH_OPTS+=(-i "$SHBANG_SSH_KEY")
-else
-  printf 'WARN: SHBANG_SSH_KEY not set — using default key\n' >&2
-fi
-
-if [[ -n ${SHBANG_SSH_CONFIG:-} ]]; then
-  SSH_OPTS+=(-F "$SHBANG_SSH_CONFIG")
-else
-  printf 'WARN: SHBANG_SSH_CONFIG not set — hostname resolution may fail\n' >&2
-fi
+[[ -n ${SHBANG_SSH_KEY:-}    ]] && SSH_OPTS+=(-i "$SHBANG_SSH_KEY")    || echo "WARN: SHBANG_SSH_KEY not set"    >&2
+[[ -n ${SHBANG_SSH_CONFIG:-} ]] && SSH_OPTS+=(-F "$SHBANG_SSH_CONFIG") || echo "WARN: SHBANG_SSH_CONFIG not set" >&2
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Step 1: trade filter
+# In sh.bang: $ run cat trades.csv | tr -d '\r' | tr '\n' ',' ... -> tradeFilter
 # ---------------------------------------------------------------------------
-_hdr() { printf '\n\e[1;36m[ %s ]\e[0m\n' "$*"; }
-_scp_up()  { printf '├─ \e[1;34mscp ↑\e[0m  \e[1;32m@%s\e[0m\e[2;3m:%s\e[0m  %s\n' "$1" "$2" "$3"; }
-_ssh_run() { printf '├─ \e[1;35mssh →\e[0m  \e[1;32m@%s\e[0m\e[2;3m:%s\e[0m  %s\n' "$1" "$2" "$3"; }
-
-# ---------------------------------------------------------------------------
-# Step 1: build trade filter from CSV
-# ---------------------------------------------------------------------------
-_hdr "Prepare trade filter"
+echo ""
+echo "=== Prepare trade filter ==="
 
 TRADE_FILTER=$(
   cat "$SCRIPT_DIR/trades.csv" \
@@ -99,44 +105,52 @@ TRADE_FILTER=$(
     | sed 's/,$//'
 )
 
-printf '├─ \e[1;32m$\e[0m localhost  trades.csv → tradeFilter\n'
-printf '│  tradeFilter = %s\n' "$TRADE_FILTER"
+echo "tradeFilter = $TRADE_FILTER"
 
 # ---------------------------------------------------------------------------
 # Step 2: per-shard operations
+# In sh.bang: for_each expands the shard list and runs the pipe block for each.
+# Here: a plain bash for loop — same operations, but no error aggregation,
+# no dry-run, and no way to skip a single shard without editing the script.
 # ---------------------------------------------------------------------------
-_hdr "Send jar and run replay on all shards"
+echo ""
+echo "=== Send jar and run replay on all shards ==="
 
 for id in "${SHARD_IDS[@]}"; do
-  shard=$(jq -r --arg id "$id" '.trading.shard[$id].shard'            <<< "$ENV_JSON")
-  host=$(jq -r  --arg id "$id" '.trading.shard[$id].host'             <<< "$ENV_JSON")
+  shard=$(jq -r       --arg id "$id" '.trading.shard[$id].shard'             <<< "$ENV_JSON")
+  host=$(jq -r        --arg id "$id" '.trading.shard[$id].host'              <<< "$ENV_JSON")
   install_dir=$(jq -r --arg id "$id" '.trading.shard[$id].install.directory' <<< "$ENV_JSON")
   replay_dir="/tmp/replay-${shard}"
 
-  printf '\n\e[2m--- %s @ %s ---\e[0m\n' "$shard" "$host"
+  echo ""
+  echo "--- $shard @ $host ---"
 
-  # -- 2a: upload replay jar --------------------------------------------------
-  _scp_up "$host" "/tmp" "$REPLAY_JAR"
+  # scp: upload replay jar
+  # In sh.bang: | @${host}:/tmp send ${replayJar}
+  echo "scp $REPLAY_JAR -> $DEPLOY_USER@$host:/tmp"
   scp "${SSH_OPTS[@]}" \
     "$REPLAY_JAR" \
     "${DEPLOY_USER}@${host}:/tmp" \
-    2>&1 | sed 's/^/│  /'
+    2>&1 | sed 's/^/  | /'
 
-  # -- 2b: mkdir + tar extract ------------------------------------------------
+  # ssh: mkdir + tar extract
+  # In sh.bang: | @${host}:${install.directory}/data run mkdir -p ... && tar xvf ...
   remote_cmd_extract="mkdir -p ${replay_dir} && tar xvf ${DATE_TAG}*.tar.gz -C ${replay_dir}"
-  _ssh_run "$host" "${install_dir}/data" "$remote_cmd_extract"
+  echo "ssh $DEPLOY_USER@$host  cd ${install_dir}/data && $remote_cmd_extract"
   ssh "${SSH_OPTS[@]}" \
     "${DEPLOY_USER}@${host}" \
     "cd ${install_dir}/data && ${remote_cmd_extract}" \
-    2>&1 | sed 's/^/│  /'
+    2>&1 | sed 's/^/  | /'
 
-  # -- 2c: run replay ---------------------------------------------------------
+  # ssh: run replay
+  # In sh.bang: | @${host}:/tmp/replay-${shard} run ${runtime.javaHome} -jar ...
   remote_cmd_replay="${JAVA} -jar /tmp/replay-stub.jar --rdat log.rdat.out --filter \"tradeId in (${TRADE_FILTER})\""
-  _ssh_run "$host" "$replay_dir" "$remote_cmd_replay"
+  echo "ssh $DEPLOY_USER@$host  cd ${replay_dir} && $remote_cmd_replay"
   ssh "${SSH_OPTS[@]}" \
     "${DEPLOY_USER}@${host}" \
     "cd ${replay_dir} && ${remote_cmd_replay}" \
-    2>&1 | sed 's/^/│  /'
+    2>&1 | sed 's/^/  | /'
 done
 
-printf '\n\e[1;32m[ done ]\e[0m\n'
+echo ""
+echo "=== done ==="
