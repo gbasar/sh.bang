@@ -27,7 +27,7 @@ fmt_label() {
 }
 
 fmt_local() {
-  printf "  ${C_LOCAL}%s \$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" \
+  printf "├─ ${C_LOCAL}%s \$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" \
     "$ICON_LOCAL" "$1" "$2"
 }
 
@@ -39,13 +39,13 @@ fmt_scp() {
     '↓') icon="$ICON_DOWNLOAD" ;;
     *)   icon='·' ;;
   esac
-  printf "  ${C_SCP}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+  printf "├─ ${C_SCP}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
     "$icon" "$host" "$path" "$args"
 }
 
 fmt_ssh() {
   local host=$1 path=$2 args=$3
-  printf "  ${C_SSH}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+  printf "├─ ${C_SSH}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
     "$ICON_SSH" "$host" "$path" "$args"
 }
 

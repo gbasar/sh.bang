@@ -84,11 +84,11 @@ dispatch_scp() {
   # shellcheck disable=SC2046
   case $verb in
     send)  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' scp $(_ssh_opts) "$args" "${user}@${host}:${path}" 2>&1 | sed \
-      -e 's/^/    | /' \
-      -e 's/\(    | \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
+      -e 's/^/│  /' \
+      -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
     fetch) MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' scp $(_ssh_opts) "${user}@${host}:${path}" "$args" 2>&1 | sed \
-      -e 's/^/    | /' \
-      -e 's/\(    | \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
+      -e 's/^/│  /' \
+      -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
     *)     log_debug "dispatch_scp: unknown verb: $verb" ;;
   esac
 }
@@ -104,8 +104,8 @@ dispatch_ssh() {
   # shellcheck disable=SC2046
   case $verb in
     run) MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ssh $(_ssh_opts) "${user}@${host}" "cd ${path} && ${args}" 2>&1 | sed \
-      -e 's/^/    | /' \
-      -e 's/\(    | \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
+      -e 's/^/│  /' \
+      -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
     *)   log_debug "dispatch_ssh: unknown verb: $verb" ;;
   esac
 }
