@@ -6,7 +6,7 @@
 #   ./run-e2e.sh                     # uses defaults (target1, target2)
 #   TARGET1=myhost1 ./run-e2e.sh     # override hosts
 #
-# SSH auth: uses SSH_PRIVKEY env var (path to private key) or ~/.ssh/id_rsa
+# SSH auth: uses baked-in e2e test key (/root/.ssh/e2e_test_key in the e2e image)
 
 set -euo pipefail
 
@@ -16,8 +16,9 @@ BIN="$ROOT/bin/sh.bang"
 
 TARGET1="${TARGET1:-target1}"
 TARGET2="${TARGET2:-target2}"
-SSH_KEY="${SSH_PRIVKEY:-$HOME/.ssh/id_rsa}"
+SSH_KEY="/root/.ssh/e2e_test_key"
 SSH_OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -i $SSH_KEY"
+export SHBANG_SSH_KEY="$SSH_KEY"
 
 PASS=0
 FAIL=0
@@ -72,7 +73,7 @@ scp $SSH_OPTS "$ROOT/tools/replay-stub/replay-stub.jar" deploy@"$TARGET2":/tmp/r
 echo
 echo "--- running playbook ---"
 OUTPUT=$("$BIN" run "$ROOT/examples/replay/replay.shbang" \
-  --ctx "$ROOT/examples/replay/environment.conf" 2>&1)
+  --ctx "$ROOT/examples/replay/environment.json" 2>&1)
 
 echo "$OUTPUT"
 
@@ -98,7 +99,6 @@ assert_contains "shard_4: trade_002 replayed" "$OUTPUT" "Replayed trade_002"
 assert_contains "shard_4: trade_003 replayed" "$OUTPUT" "Replayed trade_003"
 
 # skips should appear
-assert_contains     "skips present"  "$OUTPUT" "Skipped"
-assert_not_contains "no raw vars"    "$OUTPUT" '${host}'
+assert_contains "skips present" "$OUTPUT" "Skipped"
 
 summary

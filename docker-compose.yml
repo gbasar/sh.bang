@@ -17,18 +17,18 @@ services:
       context: .
       dockerfile: Dockerfile.server
     hostname: target1
-    environment:
-      - SSH_PUBKEY
+    ports:
+      - "2221:22"
 
   target2:
     build:
       context: .
       dockerfile: Dockerfile.server
     hostname: target2
-    environment:
-      - SSH_PUBKEY
+    ports:
+      - "2222:22"
 
-  # ---------- e2e runner (Fedora -> Fedora) ----------
+  # ---------- e2e runner ----------
 
   e2e:
     build:
@@ -40,5 +40,4 @@ services:
     environment:
       - TARGET1=target1
       - TARGET2=target2
-      - SSH_PRIVKEY
     depends_on: [target1, target2]

@@ -62,7 +62,10 @@ parse_playbook() {
 
     [[ -z $line ]] && continue
     [[ $line =~ ^[[:space:]]*// ]] && continue
-    [[ $line =~ ^[[:space:]]*#! ]] && continue
+    if [[ $line =~ ^[[:space:]]*#![[:space:]]*(.+)$ ]]; then
+      emit_kv parser.label text "${BASH_REMATCH[1]}"
+      continue
+    fi
 
     # resources {} block — skip for now, resolved in preflight phase
     if [[ $line =~ ^[[:space:]]*resources[[:space:]]*\{ ]]; then

@@ -12,6 +12,7 @@ declare -A CONSOLE_EVENT_FORMATTERS=(
   [parser.for_each]=console_parser_for_each
   [parser.pipe]=console_parser_pipe
   [parser.local]=console_parser_local
+  [parser.label]=console_parser_label
   [cmd.scp]=console_cmd_scp
   [cmd.ssh]=console_cmd_ssh
 )
@@ -65,17 +66,17 @@ console_run_loaded() {
 
 console_parser_for_each() {
   local -n event=$1
-
-  printf '[for_each] %s\n' "${event[selector]}"
+  log_debug "for_each ${event[selector]}"
 }
 
 console_parser_pipe() {
   local -n event=$1
+  log_debug "pipe subject=${event[subject]} verb=${event[verb]} args=${event[args]}"
+}
 
-  printf '[pipe] subject=%s verb=%s args=%s\n' \
-    "${event[subject]}" \
-    "${event[verb]}" \
-    "${event[args]}"
+console_parser_label() {
+  local -n event=$1
+  printf '\n--- %s ---\n' "${event[text]}"
 }
 
 console_parser_local() {
@@ -85,14 +86,14 @@ console_parser_local() {
 
 console_cmd_scp() {
   local -n event=$1
-  printf '[cmd:scp] %s:%s  %s  %s\n' \
-    "${event[host]}" "${event[path]}" "${event[verb]}" "${event[args]}"
+  printf '→ scp  %s:%s  %s\n' \
+    "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
 console_cmd_ssh() {
   local -n event=$1
-  printf '[cmd:ssh] %s:%s  %s  %s\n' \
-    "${event[host]}" "${event[path]}" "${event[verb]}" "${event[args]}"
+  printf '→ ssh  %s:%s  %s\n' \
+    "${event[host]}" "${event[path]}" "${event[args]}"
 }
 
 console_default() {

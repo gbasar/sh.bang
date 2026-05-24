@@ -29,10 +29,10 @@ render_vars() {
     local path=${BASH_REMATCH[1]}
     local value
     # 1. try the shard node
-    value=$(MSYS_NO_PATHCONV=1 jq -r ".${path} // empty" <<< "$node_json" 2>/dev/null || true)
+    value=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r ".${path} // empty" <<< "$node_json" 2>/dev/null || true)
     # 2. fall back to full context JSON (top-level fields like runtime.javaHome)
     if [[ -z $value ]]; then
-      value=$(MSYS_NO_PATHCONV=1 jq -r ".${path} // empty" "${SHBANG_RT[ctx]}" 2>/dev/null || true)
+      value=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r ".${path} // empty" "${SHBANG_RT[ctx]}" 2>/dev/null || true)
     fi
     # 3. fall back to SHBANG_RT (captured locals like tradeFilter)
     if [[ -z $value && -n ${SHBANG_RT[$path]:-} ]]; then
@@ -100,13 +100,19 @@ expand_pipe() {
 
     local cmd_type
     case $prefix in
-      @)  cmd_type=cmd.scp ;;
+      @)
+        case $verb in
+          send|fetch) cmd_type=cmd.scp ;;
+          *)          cmd_type=cmd.ssh ;;
+        esac ;;
       '#') cmd_type=cmd.ssh ;;
       *)  log_debug "expand: unknown subject prefix in: $subject"; continue ;;
     esac
 
     # Serialise to JSON and push onto the queue — no nested emit_kv needed
-    _CMD_QUEUE+=("$(jq -cn \
+    # MSYS_NO_PATHCONV+MSYS2_ARG_CONV_EXCL prevent Git Bash from converting
+    # Linux paths (e.g. /tmp) passed as --arg values to Windows equivalents.
+    _CMD_QUEUE+=("$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -cn \
       --arg type    "$cmd_type" \
       --arg user    "$user"     \
       --arg host    "$host"     \

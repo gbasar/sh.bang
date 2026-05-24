@@ -14,7 +14,7 @@ DATE_TAG="20250522"
 
 TARGET_HOST=$1
 SHARDS=$2
-SSH_KEY="${3:-$HOME/.ssh/id_rsa}"
+SSH_KEY="${3:-/root/.ssh/e2e_test_key}"
 SSH_OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -i $SSH_KEY"
 
 echo "[setup] configuring $TARGET_HOST with shards: $SHARDS"

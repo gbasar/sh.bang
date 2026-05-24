@@ -12,10 +12,14 @@ RUN useradd -m -s /bin/bash deploy && \
 # SSH host keys
 RUN ssh-keygen -A
 
-# Inject SSH public key at container startup via SSH_PUBKEY env var
-COPY docker/server-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Bake e2e test pubkey into authorized_keys at build time
+RUN mkdir -p /home/deploy/.ssh && \
+    echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID//BrNjF0G252YXD/Hx2NiTD6oA4nxh2pMshnYTiQwH shbang-e2e-test" \
+      > /home/deploy/.ssh/authorized_keys && \
+    chmod 700 /home/deploy/.ssh && \
+    chmod 600 /home/deploy/.ssh/authorized_keys && \
+    chown -R deploy:deploy /home/deploy/.ssh
 
 EXPOSE 22
 
-CMD ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/sbin/sshd", "-D", "-e"]
