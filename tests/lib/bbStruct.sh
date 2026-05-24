@@ -152,10 +152,19 @@ exec java \\
   ${txn_log}
 SCRIPT
 
+    cat > ${bin}/start-intellij <<SCRIPT
+#!/usr/bin/env bash
+echo \"[start-intellij] ${shard} waiting for debugger on port ${jdwp_port} (suspend=y)...\"
+exec java \\
+  -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:${jdwp_port} \\
+  -jar ${lib}/bluebird-stub.jar \\
+  ${txn_log}
+SCRIPT
+
     cat > ${bin}/stop <<'SCRIPT'
 #!/usr/bin/env bash
 pkill -f bluebird-stub.jar || true
-echo \"stopped\"
+echo "stopped"
 SCRIPT
 
     cat > ${bin}/restart <<'SCRIPT'
@@ -165,7 +174,7 @@ sleep 1
 \$(dirname \$0)/start
 SCRIPT
 
-    chmod +x ${bin}/start ${bin}/stop ${bin}/restart
+    chmod +x ${bin}/start ${bin}/start-intellij ${bin}/stop ${bin}/restart
   "
 }
 

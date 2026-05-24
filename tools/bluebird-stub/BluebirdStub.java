@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class BluebirdStub {
 
-    private static final long STATIC_DATA_DELAY_MS = 50;
+    private static final long STATIC_DATA_DELAY_MS = 500;
     private static final long HEARTBEAT_INTERVAL_S = 10;
 
     public static void main(String[] args) throws Exception {
