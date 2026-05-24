@@ -9,6 +9,7 @@ declare -A GLOBAL_FLAG_HANDLERS=(
 declare -A RUN_FLAG_HANDLERS=(
   [ctx]=handle_run_ctx
   [dry_run]=handle_run_dry_run
+  [fancy]=handle_flag_fancy
   [verbosity]=handle_flag_verbosity
   [help]=handle_flag_help
 )
@@ -131,4 +132,11 @@ handle_run_dry_run() {
 
   SHBANG_RT[dry_run]=true
   args_drop 1 dry_args
+}
+
+handle_flag_fancy() {
+  local -n fancy_args=$1
+
+  SHBANG_RT[display]=fancy
+  args_drop 1 fancy_args
 }

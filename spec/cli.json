@@ -42,6 +42,9 @@
     },
     "--dry-run": {
       "kind": "dry_run"
+    },
+    "--fancy": {
+      "kind": "fancy"
     }
   },
   "verbosity": {

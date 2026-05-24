@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # All terminal color/formatting for sh.bang output.
 # Escape codes only — no business logic here.
+#
+# Display modes:
+#   ascii (default) — plain text sigils, works in any terminal
+#   fancy           — nerd font icons, requires a patched nerd font (pass --fancy)
 
 # palette
 C_RESET='\e[0m'
@@ -14,39 +18,61 @@ C_PATH='\e[2;3m'         # dim italic       — :path
 C_REMOTE='\e[2m'         # dim              — remote output prefix
 C_ERROR='\e[1;31m'       # red bold         — error lines in remote output
 
-# nerd font icons
+# nerd font icons (used in --fancy mode only)
 ICON_LABEL='󰓫'    # nf-md-label
 ICON_LOCAL=''    # nf-fa-terminal
 ICON_UPLOAD='󰕒'   # nf-md-upload
 ICON_DOWNLOAD='󰇚'  # nf-md-download
 ICON_SSH='󰒍'      # nf-md-remote_desktop
-ICON_PIPE=''     # nf-oct-chevron_right
+
+_is_fancy() {
+  [[ ${SHBANG_RT[display]:-ascii} == fancy ]]
+}
 
 fmt_label() {
-  printf "${C_LABEL} %s  %s${C_RESET}\n" "$ICON_LABEL" "$1"
+  if _is_fancy; then
+    printf "${C_LABEL} %s  %s${C_RESET}\n" "$ICON_LABEL" "$1"
+  else
+    printf "${C_LABEL}[ %s ]${C_RESET}\n" "$1"
+  fi
 }
 
 fmt_local() {
-  printf "├─ ${C_LOCAL}%s \$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" \
-    "$ICON_LOCAL" "$1" "$2"
+  if _is_fancy; then
+    printf "├─ ${C_LOCAL}%s \$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" \
+      "$ICON_LOCAL" "$1" "$2"
+  else
+    printf "├─ ${C_LOCAL}\$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" \
+      "$1" "$2"
+  fi
 }
 
 fmt_scp() {
   local arrow=$1 host=$2 path=$3 args=$4
-  local icon
-  case $arrow in
-    '↑') icon="$ICON_UPLOAD" ;;
-    '↓') icon="$ICON_DOWNLOAD" ;;
-    *)   icon='·' ;;
-  esac
-  printf "├─ ${C_SCP}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
-    "$icon" "$host" "$path" "$args"
+  if _is_fancy; then
+    local icon
+    case $arrow in
+      '↑') icon="$ICON_UPLOAD" ;;
+      '↓') icon="$ICON_DOWNLOAD" ;;
+      *)   icon='·' ;;
+    esac
+    printf "├─ ${C_SCP}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+      "$icon" "$host" "$path" "$args"
+  else
+    printf "├─ ${C_SCP}scp %s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+      "$arrow" "$host" "$path" "$args"
+  fi
 }
 
 fmt_ssh() {
   local host=$1 path=$2 args=$3
-  printf "├─ ${C_SSH}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
-    "$ICON_SSH" "$host" "$path" "$args"
+  if _is_fancy; then
+    printf "├─ ${C_SSH}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+      "$ICON_SSH" "$host" "$path" "$args"
+  else
+    printf "├─ ${C_SSH}ssh →${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+      "$host" "$path" "$args"
+  fi
 }
 
 # Colorize a stream of remote output lines (piped via sed/awk).

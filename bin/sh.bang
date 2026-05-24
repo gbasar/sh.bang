@@ -58,6 +58,7 @@ runtime_init() {
   declare -gA SHBANG_RT=(
     [verbosity]=0
     [dry_run]=false
+    [display]=ascii
     [version]="$SHBANG_VERSION"
     [home]="$SHBANG_HOME"
     [cli_spec]="$SHBANG_CLI_SPEC"
