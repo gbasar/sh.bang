@@ -4,3 +4,5 @@
 *.json text eol=lf
 *.md text eol=lf
 Dockerfile* text eol=lf
+bin/sh.bang text eol=lf
+tests/run-tests text eol=lf

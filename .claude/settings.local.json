@@ -17,7 +17,8 @@
       "Bash(git -C \"C:\\\\d\\\\projects\\\\sh.bang\" show 8fbff6f:examples/archive/v1/replay/trading1.hocon)",
       "Bash(git -C \"C:\\\\d\\\\projects\\\\sh.bang\" show 8fbff6f:examples/archive/v1/replay/trading2.hocon)",
       "Bash(git checkout *)",
-      "Bash(mkdir -p \"C:\\\\d\\\\projects\\\\sh.bang\\\\tools\\\\replay-stub\")"
+      "Bash(mkdir -p \"C:\\\\d\\\\projects\\\\sh.bang\\\\tools\\\\replay-stub\")",
+      "Bash(git commit *)"
     ]
   }
 }

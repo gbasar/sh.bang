@@ -29,10 +29,10 @@ render_vars() {
     local path=${BASH_REMATCH[1]}
     local value
     # 1. try the shard node
-    value=$(MSYS_NO_PATHCONV=1 jq -r ".${path} // empty" <<< "$node_json" 2>/dev/null || true)
+    value=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r ".${path} // empty" <<< "$node_json" 2>/dev/null || true)
     # 2. fall back to full context JSON (top-level fields like runtime.javaHome)
     if [[ -z $value ]]; then
-      value=$(MSYS_NO_PATHCONV=1 jq -r ".${path} // empty" "${SHBANG_RT[ctx]}" 2>/dev/null || true)
+      value=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r ".${path} // empty" "${SHBANG_RT[ctx]}" 2>/dev/null || true)
     fi
     # 3. fall back to SHBANG_RT (captured locals like tradeFilter)
     if [[ -z $value && -n ${SHBANG_RT[$path]:-} ]]; then
@@ -47,10 +47,28 @@ render_vars() {
 # ---------- expand handlers ----------
 
 declare -A EXPAND_HANDLERS=(
+  [parser.resource]=expand_resource
   [parser.for_each]=expand_for_each
   [parser.pipe]=expand_pipe
   [parser.local]=expand_local
 )
+
+# Accumulate resource declarations during parse; resolved lazily before first pipe.
+declare -A _RESOURCES=()
+_RESOURCES_RESOLVED=false
+
+expand_resource() {
+  local -n er_event=$1
+  _RESOURCES[${er_event[name]}]=${er_event[uri]}
+}
+
+_ensure_resources_resolved() {
+  [[ $_RESOURCES_RESOLVED == true ]] && return 0
+  _RESOURCES_RESOLVED=true
+  if (( ${#_RESOURCES[@]} > 0 )); then
+    resolve_resources _RESOURCES
+  fi
+}
 
 event_expand() {
   local -n ex_event=$1
@@ -61,6 +79,7 @@ event_expand() {
 
 expand_for_each() {
   local -n ef_event=$1
+  _ensure_resources_resolved
   SHBANG_RT[_expand_selector]=${ef_event[selector]}
 }
 
@@ -100,13 +119,19 @@ expand_pipe() {
 
     local cmd_type
     case $prefix in
-      @)  cmd_type=cmd.scp ;;
+      @)
+        case $verb in
+          send|fetch) cmd_type=cmd.scp ;;
+          *)          cmd_type=cmd.ssh ;;
+        esac ;;
       '#') cmd_type=cmd.ssh ;;
       *)  log_debug "expand: unknown subject prefix in: $subject"; continue ;;
     esac
 
     # Serialise to JSON and push onto the queue — no nested emit_kv needed
-    _CMD_QUEUE+=("$(jq -cn \
+    # MSYS_NO_PATHCONV+MSYS2_ARG_CONV_EXCL prevent Git Bash from converting
+    # Linux paths (e.g. /tmp) passed as --arg values to Windows equivalents.
+    _CMD_QUEUE+=("$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -cn \
       --arg type    "$cmd_type" \
       --arg user    "$user"     \
       --arg host    "$host"     \

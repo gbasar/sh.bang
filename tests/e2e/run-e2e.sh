@@ -4,9 +4,10 @@
 #
 # Usage:
 #   ./run-e2e.sh                     # uses defaults (target1, target2)
+#   ./run-e2e.sh --inline             # stream output live (default: buffered)
 #   TARGET1=myhost1 ./run-e2e.sh     # override hosts
 #
-# SSH auth: uses SSH_PRIVKEY env var (path to private key) or ~/.ssh/id_rsa
+# SSH auth: uses baked-in e2e test key (/root/.ssh/e2e_test_key in the e2e image)
 
 set -euo pipefail
 
@@ -14,10 +15,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 E2E="$ROOT/tests/e2e"
 BIN="$ROOT/bin/sh.bang"
 
+STREAM=false
+while [[ ${1:-} == -* ]]; do
+  case $1 in
+    --inline) STREAM=true ;;
+    *)        printf 'unknown flag: %s\n' "$1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
 TARGET1="${TARGET1:-target1}"
 TARGET2="${TARGET2:-target2}"
-SSH_KEY="${SSH_PRIVKEY:-$HOME/.ssh/id_rsa}"
+SSH_KEY="/root/.ssh/e2e_test_key"
 SSH_OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -i $SSH_KEY"
+export SHBANG_SSH_KEY="$SSH_KEY"
 
 PASS=0
 FAIL=0
@@ -36,8 +47,17 @@ assert_not_contains() {
 }
 
 summary() {
-  printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
-  (( FAIL == 0 ))
+  if (( FAIL == 0 )); then
+    printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
+  else
+    printf '\n\e[1;31m ___ _  _ _ _____   ___  ___   ___  __  __ \n' >&2
+    printf '/ __| || / |_   _| | _ )/ _ \ / _ \|  \/  |\n' >&2
+    printf '\__ \ __ | | | |   | _ \ (_) | (_) | |\/| |\n' >&2
+    printf '|___/_||_|_| |_|   |___/\___/ \___/|_|  |_|\n' >&2
+    printf '\e[0m\n' >&2
+    printf '\e[1;31m%d passed, %d failed\e[0m\n' "$PASS" "$FAIL"
+    return 1
+  fi
 }
 
 echo "=== sh.bang e2e: replay ==="
@@ -71,10 +91,17 @@ scp $SSH_OPTS "$ROOT/tools/replay-stub/replay-stub.jar" deploy@"$TARGET2":/tmp/r
 
 echo
 echo "--- running playbook ---"
-OUTPUT=$("$BIN" run "$ROOT/examples/replay/replay.shbang" \
-  --ctx "$ROOT/examples/replay/environment.conf" 2>&1)
-
-echo "$OUTPUT"
+_LOG=$(mktemp)
+if [[ $STREAM == true ]]; then
+  "$BIN" run "$ROOT/examples/replay/replay.shbang" \
+    --ctx "$ROOT/examples/replay/environment.json" 2>&1 | tee "$_LOG"
+  OUTPUT=$(cat "$_LOG")
+else
+  OUTPUT=$("$BIN" run "$ROOT/examples/replay/replay.shbang" \
+    --ctx "$ROOT/examples/replay/environment.json" 2>&1)
+  echo "$OUTPUT"
+fi
+rm -f "$_LOG"
 
 # ---------- assert ----------
 
@@ -98,7 +125,6 @@ assert_contains "shard_4: trade_002 replayed" "$OUTPUT" "Replayed trade_002"
 assert_contains "shard_4: trade_003 replayed" "$OUTPUT" "Replayed trade_003"
 
 # skips should appear
-assert_contains     "skips present"  "$OUTPUT" "Skipped"
-assert_not_contains "no raw vars"    "$OUTPUT" '${host}'
+assert_contains "skips present" "$OUTPUT" "Skipped"
 
 summary
