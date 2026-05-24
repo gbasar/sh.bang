@@ -14,5 +14,5 @@ $ run cat examples/solace-replay/trades.csv | tr -d '\r' | tr '\n' ',' | sed 's/
 
 for_each ${trading.shard[*]}
 | @${host}:/tmp send ${replayJar}
-| @${host}:${install.directory}/data run mkdir -p /tmp/replay-${shard} && tar xvf 20250522*.tar.gz -C /tmp/replay-${shard}
+| @${host}:${install.directory}/trading/data/trading/archive run mkdir -p /tmp/replay-${shard} && tar xvf trading-data-20250522*.tar.gz -C /tmp/replay-${shard}
 | @${host}:/tmp/replay-${shard} run ${runtime.javaHome} -jar /tmp/replay-stub.jar --rdat log.rdat.out --filter "tradeId in (${tradeFilter})"
