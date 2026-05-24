@@ -14,30 +14,39 @@ C_PATH='\e[2;3m'         # dim italic       — :path
 C_REMOTE='\e[2m'         # dim              — remote output prefix
 C_ERROR='\e[1;31m'       # red bold         — error lines in remote output
 
+# nerd font icons
+ICON_LABEL='󰓫'    # nf-md-label
+ICON_LOCAL=''    # nf-fa-terminal
+ICON_UPLOAD='󰕒'   # nf-md-upload
+ICON_DOWNLOAD='󰇚'  # nf-md-download
+ICON_SSH='󰒍'      # nf-md-remote_desktop
+ICON_PIPE=''     # nf-oct-chevron_right
+
 fmt_label() {
-  printf "${C_LABEL}[ %s ]${C_RESET}\n" "$1"
+  printf "${C_LABEL} %s  %s${C_RESET}\n" "$ICON_LABEL" "$1"
 }
 
 fmt_local() {
-  printf "  ${C_LOCAL}\$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" "$1" "$2"
+  printf "  ${C_LOCAL}%s \$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" \
+    "$ICON_LOCAL" "$1" "$2"
 }
 
 fmt_scp() {
   local arrow=$1 host=$2 path=$3 args=$4
-  local dir
+  local icon
   case $arrow in
-    '↑') dir='>>' ;;
-    '↓') dir='<<' ;;
-    *)   dir='·'  ;;
+    '↑') icon="$ICON_UPLOAD" ;;
+    '↓') icon="$ICON_DOWNLOAD" ;;
+    *)   icon='·' ;;
   esac
-  printf "  ${C_SCP}scp${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s %s\n" \
-    "$host" "$path" "$dir" "$args"
+  printf "  ${C_SCP}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+    "$icon" "$host" "$path" "$args"
 }
 
 fmt_ssh() {
   local host=$1 path=$2 args=$3
-  printf "  ${C_SSH}ssh →${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
-    "$host" "$path" "$args"
+  printf "  ${C_SSH}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
+    "$ICON_SSH" "$host" "$path" "$args"
 }
 
 # Colorize a stream of remote output lines (piped via sed/awk).
