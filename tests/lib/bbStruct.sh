@@ -16,6 +16,10 @@
 #   1. explicit [ssh_key] argument
 #   2. $E2E_SSH_KEY env var
 #   3. /root/.ssh/e2e_test_key (default in e2e Docker image)
+#
+# SSH config (optional):
+#   $E2E_SSH_CONFIG env var — if set, passed as -F to all ssh/scp calls
+#   Useful for playground where hosts resolve via a local SSH config file
 
 set -euo pipefail
 
@@ -25,7 +29,10 @@ set -euo pipefail
 
 _bb_ssh_opts() {
   local key="${1:-${E2E_SSH_KEY:-/root/.ssh/e2e_test_key}}"
-  printf -- '-o StrictHostKeyChecking=no -o BatchMode=yes -o KexAlgorithms=ecdh-sha2-nistp256 -i %s' "$key"
+  local cfg="${E2E_SSH_CONFIG:-}"
+  local opts="-o StrictHostKeyChecking=no -o BatchMode=yes -o KexAlgorithms=ecdh-sha2-nistp256 -i ${key}"
+  [[ -n $cfg ]] && opts="-F ${cfg} ${opts}"
+  printf -- '%s' "$opts"
 }
 
 _bb_ssh() {

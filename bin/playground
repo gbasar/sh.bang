@@ -74,7 +74,9 @@ Host trading-host2
   KexAlgorithms ecdh-sha2-nistp256
 EOF
 
-SSH_OPTS="-F $SSH_CONFIG -o KexAlgorithms=ecdh-sha2-nistp256"
+export E2E_SSH_KEY="$SSH_KEY"
+export E2E_SSH_CONFIG="$SSH_CONFIG"
+source "$REPO/tests/lib/bbStruct.sh"
 
 echo "[playground] setting up fixture data on targets..."
 FIXTURE_DIR="$REPO/tests/e2e/fixtures"
@@ -83,25 +85,21 @@ DATE_TAG="20250522"
 
 for shard in shard_1 shard_2; do
   echo "[playground]   $shard → trading-host1"
-  ssh $SSH_OPTS trading-host1 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
-  local_tar=$(mktemp --suffix=.tar.gz)
-  tar czf "$local_tar" -C "$FIXTURE_DIR/$shard" log.rdat.out
-  scp $SSH_OPTS "$local_tar" "trading-host1:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
-  rm -f "$local_tar"
+  bb_create_shard_layout trading-host1 "$INSTALL_BASE" "$shard"
+  bb_create_binaries     trading-host1 "$INSTALL_BASE" "$shard"
+  bb_create_archive      trading-host1 "$INSTALL_BASE" "$shard" "$DATE_TAG" "$FIXTURE_DIR/$shard"
 done
 
 for shard in shard_3 shard_4; do
   echo "[playground]   $shard → trading-host2"
-  ssh $SSH_OPTS trading-host2 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
-  local_tar=$(mktemp --suffix=.tar.gz)
-  tar czf "$local_tar" -C "$FIXTURE_DIR/$shard" log.rdat.out
-  scp $SSH_OPTS "$local_tar" "trading-host2:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
-  rm -f "$local_tar"
+  bb_create_shard_layout trading-host2 "$INSTALL_BASE" "$shard"
+  bb_create_binaries     trading-host2 "$INSTALL_BASE" "$shard"
+  bb_create_archive      trading-host2 "$INSTALL_BASE" "$shard" "$DATE_TAG" "$FIXTURE_DIR/$shard"
 done
 
 echo "[playground] copying replay-stub.jar to targets..."
-scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" trading-host1:/tmp/replay-stub.jar
-scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tmp/replay-stub.jar
+scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host1:/tmp/replay-stub.jar
+scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tmp/replay-stub.jar
 
 export SHBANG_SSH_KEY="$SSH_KEY"
 export SHBANG_SSH_CONFIG="$SSH_CONFIG"
