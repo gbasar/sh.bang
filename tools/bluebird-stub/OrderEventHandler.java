@@ -24,8 +24,6 @@ public class OrderEventHandler {
         // In the real app this is where order state is built/updated.
         // Developers set breakpoints here with orderId conditions to
         // isolate specific orders without stepping through thousands of others.
-        System.out.println("  [OrderEventHandler] process orderId=" + orderId
-                + "  seq=" + processedCount);
     }
 
     public int getProcessedCount() {

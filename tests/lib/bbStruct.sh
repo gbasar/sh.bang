@@ -129,7 +129,7 @@ SCRIPT
 #
 # Like bb_create_binaries but start injects JDWP (suspend=n) and runs the
 # given jar.  The app starts normally and the debugger can attach at any time.
-# Use with blackbird-stub.jar for the debug-replay scenario.
+# Use with bluebird-stub.jar for the debug-replay scenario.
 # ---------------------------------------------------------------------------
 bb_create_debug_binaries() {
   local host=$1 install_dir=$2 shard=$3 jar_path=$4 jdwp_port=$5 key="${6:-}"
@@ -140,7 +140,7 @@ bb_create_debug_binaries() {
   echo "[bbStruct] create debug binaries: deploy@${host}:${bin}  jdwp=*:${jdwp_port}"
 
   # upload the jar into lib/
-  _bb_scp "$jar_path" "deploy@${host}:${lib}/blackbird-stub.jar" "$key"
+  _bb_scp "$jar_path" "deploy@${host}:${lib}/bluebird-stub.jar" "$key"
 
   _bb_ssh "$host" "$key" "
     cat > ${bin}/start <<SCRIPT
@@ -148,13 +148,13 @@ bb_create_debug_binaries() {
 echo \"[start] ${shard} starting with JDWP on port ${jdwp_port}\"
 exec java \\
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${jdwp_port} \\
-  -jar ${lib}/blackbird-stub.jar \\
+  -jar ${lib}/bluebird-stub.jar \\
   ${txn_log}
 SCRIPT
 
     cat > ${bin}/stop <<'SCRIPT'
 #!/usr/bin/env bash
-pkill -f blackbird-stub.jar || true
+pkill -f bluebird-stub.jar || true
 echo \"stopped\"
 SCRIPT
 

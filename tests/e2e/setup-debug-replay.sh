@@ -19,10 +19,10 @@ source "$SCRIPT_DIR/../lib/bbStruct.sh"
 INSTALL_BASE="/opt/trading"
 SSH_KEY="${1:-/root/.ssh/e2e_test_key}"
 FIXTURE_DIR="$SCRIPT_DIR/fixtures/debug-replay"
-BLACKBIRD_JAR="$ROOT/tools/blackbird-stub/blackbird-stub.jar"
+BLACKBIRD_JAR="$ROOT/tools/bluebird-stub/bluebird-stub.jar"
 
 [[ -f $BLACKBIRD_JAR ]] || {
-  echo "ERROR: blackbird-stub.jar not found at $BLACKBIRD_JAR" >&2
+  echo "ERROR: bluebird-stub.jar not found at $BLACKBIRD_JAR" >&2
   echo "       Build via: docker compose run --rm e2e" >&2
   exit 1
 }
