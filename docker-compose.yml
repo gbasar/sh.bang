@@ -1,9 +1,6 @@
 services:
-  server:
-    build:
-      context: .
-      dockerfile: Dockerfile.server
-    hostname: app03.prod.internal
+
+  # ---------- unit tests ----------
 
   test:
     build:
@@ -12,12 +9,36 @@ services:
         HOCON_JAR_URL: ${HOCON_JAR_URL:-}
     entrypoint: bash
     command: tests/run-tests
-    depends_on: [server]
 
-  run:
+  # ---------- e2e targets ----------
+
+  target1:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    hostname: target1
+    environment:
+      - SSH_PUBKEY
+
+  target2:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    hostname: target2
+    environment:
+      - SSH_PUBKEY
+
+  # ---------- e2e runner (Fedora -> Fedora) ----------
+
+  e2e:
     build:
       context: .
       args:
         HOCON_JAR_URL: ${HOCON_JAR_URL:-}
-    command: run examples/replay/replay.shbang --ctx examples/replay/context.json
-    depends_on: [server]
+    entrypoint: bash
+    command: tests/e2e/run-e2e.sh
+    environment:
+      - TARGET1=target1
+      - TARGET2=target2
+      - SSH_PRIVKEY
+    depends_on: [target1, target2]

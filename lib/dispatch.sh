@@ -52,12 +52,12 @@ dispatch_queue() {
   local -A dq_event
   for entry in "${_CMD_QUEUE[@]}"; do
     dq_event=(
-      [type]=$(jq -r .type <<< "$entry")
-      [user]=$(jq -r .user <<< "$entry")
-      [host]=$(jq -r .host <<< "$entry")
-      [path]=$(jq -r .path <<< "$entry")
-      [verb]=$(jq -r .verb <<< "$entry")
-      [args]=$(jq -r .args <<< "$entry")
+      [type]=$(jq -r '.type // empty' <<< "$entry")
+      [user]=$(jq -r '.user // "deploy"' <<< "$entry")
+      [host]=$(jq -r '.host // empty' <<< "$entry")
+      [path]=$(jq -r '.path // empty' <<< "$entry")
+      [verb]=$(jq -r '.verb // empty' <<< "$entry")
+      [args]=$(jq -r '.args // empty' <<< "$entry")
     )
     emit dq_event
   done
