@@ -81,7 +81,7 @@ console_parser_label() {
 
 console_parser_local() {
   local -n event=$1
-  printf '  \e[2m⚙  %s → %s\e[0m\n' "${event[cmd]}" "${event[capture]}"
+  printf '  \e[1;33m$\e[0m  \e[2m%s → %s\e[0m\n' "${event[cmd]}" "${event[capture]}"
 }
 
 console_cmd_scp() {
