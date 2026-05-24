@@ -19,7 +19,7 @@ fmt_label() {
 }
 
 fmt_local() {
-  printf "  ${C_LOCAL}\$${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" "$1" "$2"
+  printf "  ${C_LOCAL}\$ localhost${C_RESET}  ${C_LOCAL_DIM}%s → %s${C_RESET}\n" "$1" "$2"
 }
 
 fmt_scp() {
