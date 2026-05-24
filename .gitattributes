@@ -1,10 +1,12 @@
-* text=auto
-*.sh text eol=lf
-*.shbang text eol=lf
-*.json text eol=lf
-*.md text eol=lf
-Dockerfile* text eol=lf
-bin/sh.bang text eol=lf
-tests/run-tests text eol=lf
+# Force LF for everything text — no CRLF anywhere, ever
+* text=auto eol=lf
+
+# Binaries — no line ending translation
+*.jar binary
+*.gz binary
+*.tar binary
+*.zip binary
+*.png binary
+*.jpg binary
 tests/e2e/e2e_test_key binary
 tests/e2e/e2e_test_key.pub binary
