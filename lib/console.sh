@@ -24,8 +24,14 @@ fmt_local() {
 
 fmt_scp() {
   local arrow=$1 host=$2 path=$3 args=$4
-  printf "  ${C_SCP}scp %s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
-    "$arrow" "$host" "$path" "$args"
+  local dir
+  case $arrow in
+    '↑') dir='>>' ;;
+    '↓') dir='<<' ;;
+    *)   dir='·'  ;;
+  esac
+  printf "  ${C_SCP}scp${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s %s\n" \
+    "$host" "$path" "$dir" "$args"
 }
 
 fmt_ssh() {
