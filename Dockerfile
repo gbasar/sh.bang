@@ -44,7 +44,7 @@ RUN cd /app/tools/replay-stub && \
 
 # Build bluebird-stub.jar
 RUN cd /app/tools/bluebird-stub && \
-    javac --release 17 -encoding UTF-8 BluebirdStub.java OrderEventHandler.java TradeEventHandler.java StaticDataHandler.java && \
+    javac --release 17 -encoding UTF-8 -g BluebirdStub.java OrderEventHandler.java TradeEventHandler.java StaticDataHandler.java && \
     jar cfe bluebird-stub.jar BluebirdStub BluebirdStub.class OrderEventHandler.class TradeEventHandler.class StaticDataHandler.class && \
     rm -f BluebirdStub.class OrderEventHandler.class TradeEventHandler.class StaticDataHandler.class
 

@@ -93,7 +93,7 @@ public class JdiAttacher {
             .orElseThrow(() -> new RuntimeException("SocketAttach connector not found — is jdk.jdi available?"));
 
         Map<String, Connector.Argument> params = connector.defaultArguments();
-        params.get("host").setValue(host);
+        params.get("hostname").setValue(host);
         params.get("port").setValue(String.valueOf(port));
 
 
