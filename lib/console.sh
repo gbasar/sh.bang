@@ -5,11 +5,11 @@
 # palette
 C_RESET='\e[0m'
 C_LABEL='\e[1;36m'       # cyan bold       — section headers
-C_LOCAL='\e[1;33m'       # yellow bold      — $ local sigil
+C_LOCAL='\e[1;32m'       # green bold       — $ local sigil
 C_LOCAL_DIM='\e[2m'      # dim              — local cmd text
 C_SCP='\e[1;34m'         # blue bold        — scp verb
 C_SSH='\e[1;35m'         # magenta bold     — ssh verb
-C_HOST='\e[1;37m'        # white bold       — @host
+C_HOST='\e[1;32m'        # green bold       — @host
 C_PATH='\e[2;3m'         # dim italic       — :path
 C_REMOTE='\e[2m'         # dim              — remote output prefix
 C_ERROR='\e[1;31m'       # red bold         — error lines in remote output
