@@ -13,7 +13,7 @@ import java.util.*;
  *
  * Usage:
  *   java --add-modules jdk.jdi -jar jdi-attacher.jar <host:port> \
- *        [--class <class>] [--method <method>] [--condition <expr>=<value>]
+ *        [--class <class>] [--method <method>] [--condition <expr>=<value>] [--hand-off]
  *
  * Examples:
  *   # break on class load
@@ -53,12 +53,13 @@ public class JdiAttacher {
         String[] hostPort    = args[0].split(":", 2);
         String host          = hostPort[0];
         int    port          = Integer.parseInt(hostPort[1]);
-        String targetClass   = null;
-        String targetMethod  = null;
-        String condExpr      = null;
-        String condValue     = null;
+        String  targetClass   = null;
+        String  targetMethod  = null;
+        String  condExpr      = null;
+        String  condValue     = null;
+        boolean handOff       = false;
 
-        for (int i = 1; i < args.length - 1; i++) {
+        for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
                 case "--class"     -> targetClass  = args[++i];
                 case "--method"    -> targetMethod = args[++i];
@@ -67,6 +68,7 @@ public class JdiAttacher {
                     condExpr  = kv[0];
                     condValue = kv.length > 1 ? kv[1] : "";
                 }
+                case "--hand-off"  -> handOff = true;
             }
         }
 
@@ -79,8 +81,9 @@ public class JdiAttacher {
             System.exit(1);
         }
 
-        final String fCondExpr  = condExpr;
-        final String fCondValue = condValue;
+        final String  fCondExpr  = condExpr;
+        final String  fCondValue = condValue;
+        final boolean fHandOff   = handOff;
 
         // ---- connect --------------------------------------------------------
         AttachingConnector connector = Bootstrap.virtualMachineManager()
@@ -150,6 +153,12 @@ public class JdiAttacher {
                         // condition not satisfied — resume silently
                     } else {
                         printHit(be);
+                        if (fHandOff) {
+                            System.out.println("[jdi] hand-off mode — detaching without resume");
+                            System.out.println("[jdi] app is suspended at breakpoint — attach IntelliJ now");
+                            vm.dispose();
+                            return;
+                        }
                     }
 
                 } else if (e instanceof VMDeathEvent || e instanceof VMDisconnectEvent) {
