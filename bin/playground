@@ -50,12 +50,12 @@ esac
 echo "[playground] building and starting target1, target2..."
 docker compose -f "$REPO/docker-compose.yml" up -d --build target1 target2
 
-_wait_for_ssh target1 2221
-_wait_for_ssh target2 2222
+_wait_for_ssh trading-host1 2221
+_wait_for_ssh trading-host2 2222
 
 # Write SSH config first so setup can use it
 cat > "$SSH_CONFIG" <<EOF
-Host target1
+Host trading-host1
   HostName localhost
   Port 2221
   User deploy
@@ -64,7 +64,7 @@ Host target1
   BatchMode yes
   KexAlgorithms ecdh-sha2-nistp256
 
-Host target2
+Host trading-host2
   HostName localhost
   Port 2222
   User deploy
@@ -82,26 +82,26 @@ INSTALL_BASE="/opt/trading"
 DATE_TAG="20250522"
 
 for shard in shard_1 shard_2; do
-  echo "[playground]   $shard → target1"
-  ssh $SSH_OPTS target1 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
+  echo "[playground]   $shard → trading-host1"
+  ssh $SSH_OPTS trading-host1 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
   local_tar=$(mktemp --suffix=.tar.gz)
   tar czf "$local_tar" -C "$FIXTURE_DIR/$shard" log.rdat.out
-  scp $SSH_OPTS "$local_tar" "target1:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
+  scp $SSH_OPTS "$local_tar" "trading-host1:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
   rm -f "$local_tar"
 done
 
 for shard in shard_3 shard_4; do
-  echo "[playground]   $shard → target2"
-  ssh $SSH_OPTS target2 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
+  echo "[playground]   $shard → trading-host2"
+  ssh $SSH_OPTS trading-host2 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
   local_tar=$(mktemp --suffix=.tar.gz)
   tar czf "$local_tar" -C "$FIXTURE_DIR/$shard" log.rdat.out
-  scp $SSH_OPTS "$local_tar" "target2:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
+  scp $SSH_OPTS "$local_tar" "trading-host2:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
   rm -f "$local_tar"
 done
 
 echo "[playground] copying replay-stub.jar to targets..."
-scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" target1:/tmp/replay-stub.jar
-scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" target2:/tmp/replay-stub.jar
+scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" trading-host1:/tmp/replay-stub.jar
+scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tmp/replay-stub.jar
 
 export SHBANG_SSH_KEY="$SSH_KEY"
 export SHBANG_SSH_CONFIG="$SSH_CONFIG"
@@ -111,8 +111,8 @@ echo "[playground] ready. env vars set:"
 echo "  SHBANG_SSH_KEY=$SHBANG_SSH_KEY"
 echo "  SHBANG_SSH_CONFIG=$SHBANG_SSH_CONFIG"
 echo
-echo "  ssh -F $SSH_CONFIG target1"
-echo "  ssh -F $SSH_CONFIG target2"
+echo "  ssh -F $SSH_CONFIG trading-host1"
+echo "  ssh -F $SSH_CONFIG trading-host2"
 echo
 echo "  bin/sh.bang run examples/replay/replay.shbang --ctx examples/replay/environment.json"
 echo

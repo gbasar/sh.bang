@@ -8,10 +8,10 @@
   },
   "trading": {
     "shard": {
-      "1": { "shard": "shard_1", "host": "target1", "install": { "directory": "/opt/trading/shard_1" } },
-      "2": { "shard": "shard_2", "host": "target1", "install": { "directory": "/opt/trading/shard_2" } },
-      "3": { "shard": "shard_3", "host": "target2", "install": { "directory": "/opt/trading/shard_3" } },
-      "4": { "shard": "shard_4", "host": "target2", "install": { "directory": "/opt/trading/shard_4" } }
+      "1": { "shard": "shard_1", "host": "trading-host1", "install": { "directory": "/opt/trading/shard_1" } },
+      "2": { "shard": "shard_2", "host": "trading-host1", "install": { "directory": "/opt/trading/shard_2" } },
+      "3": { "shard": "shard_3", "host": "trading-host2", "install": { "directory": "/opt/trading/shard_3" } },
+      "4": { "shard": "shard_4", "host": "trading-host2", "install": { "directory": "/opt/trading/shard_4" } }
     }
   }
 }

@@ -15,7 +15,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
-    hostname: target1
+    hostname: trading-host1
     ports:
       - "2221:22"
 
@@ -23,7 +23,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
-    hostname: target2
+    hostname: trading-host2
     ports:
       - "2222:22"
 
@@ -35,6 +35,6 @@ services:
       target: e2e
     command: tests/e2e/run-e2e.sh
     environment:
-      - TARGET1=target1
-      - TARGET2=target2
+      - TARGET1=trading-host1
+      - TARGET2=trading-host2
     depends_on: [target1, target2]
