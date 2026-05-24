@@ -48,6 +48,12 @@ RUN cd /app/tools/bluebird-stub && \
     jar cfe bluebird-stub.jar BluebirdStub BluebirdStub.class OrderEventHandler.class TradeEventHandler.class StaticDataHandler.class && \
     rm -f BluebirdStub.class OrderEventHandler.class TradeEventHandler.class StaticDataHandler.class
 
+# Build jdi-attacher.jar (requires jdk.jdi module — JDK only, not JRE)
+RUN cd /app/tools/jdi-attacher && \
+    javac --release 17 -encoding UTF-8 --add-modules jdk.jdi JdiAttacher.java && \
+    jar cfe jdi-attacher.jar JdiAttacher JdiAttacher.class && \
+    rm -f JdiAttacher.class
+
 # Bake e2e test private key
 RUN mkdir -p /root/.ssh && \
     cp tests/e2e/e2e_test_key /root/.ssh/e2e_test_key && \
