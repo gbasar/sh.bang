@@ -6,3 +6,5 @@
 Dockerfile* text eol=lf
 bin/sh.bang text eol=lf
 tests/run-tests text eol=lf
+tests/e2e/e2e_test_key binary
+tests/e2e/e2e_test_key.pub binary
