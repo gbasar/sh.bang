@@ -74,6 +74,7 @@ cmd_run() {
   [[ $ctx_json != "${opts[ctx]}" ]] && _ctx_tmp=$ctx_json
 
   SHBANG_RT[ctx]="$ctx_json"
+  SHBANG_RT[playbook_dir]="$(cd "$(dirname "${opts[playbook]}")" && pwd)"
   _CMD_QUEUE=()
 
   emit_kv run.loaded \

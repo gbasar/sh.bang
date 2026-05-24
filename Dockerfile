@@ -27,6 +27,16 @@ RUN cd /app/tools/replay-stub && \
     jar cfe replay-stub.jar ReplayStub ReplayStub.class && \
     rm -f ReplayStub.class
 
+# Build hocon-to-json fat jar (Lightbend config bundled in)
+ARG TYPESAFE_CONFIG_JAR_URL=https://repo1.maven.org/maven2/com/typesafe/config/1.4.3/config-1.4.3.jar
+RUN curl -fsSL "$TYPESAFE_CONFIG_JAR_URL" -o /tmp/typesafe-config.jar && \
+    cd /app/tools/hocon-to-json && \
+    javac --release 17 -encoding UTF-8 -cp /tmp/typesafe-config.jar HoconToJson.java && \
+    mkdir -p fat && cd fat && jar xf /tmp/typesafe-config.jar && \
+    cp ../HoconToJson.class . && \
+    jar cfe /usr/local/lib/hocon.jar HoconToJson . && \
+    cd .. && rm -rf fat HoconToJson.class /tmp/typesafe-config.jar
+
 # Bake e2e test private key into image at a known path
 RUN mkdir -p /root/.ssh && \
     cp tests/e2e/e2e_test_key /root/.ssh/e2e_test_key && \

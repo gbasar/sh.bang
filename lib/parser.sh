@@ -67,13 +67,20 @@ parse_playbook() {
       continue
     fi
 
-    # resources {} block — skip for now, resolved in preflight phase
     if [[ $line =~ ^[[:space:]]*resources[[:space:]]*\{ ]]; then
       in_resources=true
       continue
     fi
     if [[ $in_resources == true ]]; then
-      [[ $line =~ ^[[:space:]]*\} ]] && in_resources=false
+      if [[ $line =~ ^[[:space:]]*\} ]]; then
+        in_resources=false
+      elif [[ $line =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.+)$ ]]; then
+        local res_name=${BASH_REMATCH[1]}
+        local res_uri=${BASH_REMATCH[2]%$'\r'}
+        res_uri=${res_uri# }; res_uri=${res_uri% }
+        log_debug "resource declared: $res_name = $res_uri"
+        emit_kv parser.resource name "$res_name" uri "$res_uri"
+      fi
       continue
     fi
 

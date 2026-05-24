@@ -47,10 +47,28 @@ render_vars() {
 # ---------- expand handlers ----------
 
 declare -A EXPAND_HANDLERS=(
+  [parser.resource]=expand_resource
   [parser.for_each]=expand_for_each
   [parser.pipe]=expand_pipe
   [parser.local]=expand_local
 )
+
+# Accumulate resource declarations during parse; resolved lazily before first pipe.
+declare -A _RESOURCES=()
+_RESOURCES_RESOLVED=false
+
+expand_resource() {
+  local -n er_event=$1
+  _RESOURCES[${er_event[name]}]=${er_event[uri]}
+}
+
+_ensure_resources_resolved() {
+  [[ $_RESOURCES_RESOLVED == true ]] && return 0
+  _RESOURCES_RESOLVED=true
+  if (( ${#_RESOURCES[@]} > 0 )); then
+    resolve_resources _RESOURCES
+  fi
+}
 
 event_expand() {
   local -n ex_event=$1
@@ -61,6 +79,7 @@ event_expand() {
 
 expand_for_each() {
   local -n ef_event=$1
+  _ensure_resources_resolved
   SHBANG_RT[_expand_selector]=${ef_event[selector]}
 }
 

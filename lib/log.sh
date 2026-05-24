@@ -37,3 +37,16 @@ die() {
   printf '[sh.bang:error] %s\n' "$*" >&2
   exit 1
 }
+
+# curl wrapper — passes -v at wire verbosity, silent otherwise.
+# Usage: shbang_curl <url> -o <dest> [extra curl args...]
+shbang_curl() {
+  local -a curl_args=()
+  if (( SHBANG_VERBOSITY >= 4 )); then
+    curl_args+=(-v)
+  else
+    curl_args+=(-sS)
+  fi
+  log_debug "curl $*"
+  curl "${curl_args[@]}" "$@"
+}

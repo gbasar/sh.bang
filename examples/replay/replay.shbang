@@ -13,6 +13,6 @@ $ run cat examples/replay/trades.csv | tr '\n' ',' | sed 's/,$//' -> tradeFilter
 #! Send jar and run replay on all shards
 
 for_each ${trading.shard[*]}
-| @${host}:/tmp send tools/replay-stub/replay-stub.jar
+| @${host}:/tmp send ${replayJar}
 | @${host}:${install.directory}/data run mkdir -p /tmp/replay-${shard} && tar xvf 20250522*.tar.gz -C /tmp/replay-${shard}
 | @${host}:/tmp/replay-${shard} run ${runtime.javaHome} -jar /tmp/replay-stub.jar --rdat log.rdat.out --filter "tradeId in (${tradeFilter})"
