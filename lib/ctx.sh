@@ -15,8 +15,10 @@ _ensure_hocon_jar() {
 
   log_info "HOCON jar not found at ${HOCON_JAR} — building from Maven Central..."
 
-  command -v java  &>/dev/null || { log_info "  java not found; install a JDK or set HOCON_JAR"; return 1; }
-  command -v javac &>/dev/null || { log_info "  javac not found (JRE only?); install a JDK or set HOCON_JAR"; return 1; }
+  local _java="${JAVA_HOME:+${JAVA_HOME}/bin/}java"
+  local _javac="${JAVA_HOME:+${JAVA_HOME}/bin/}javac"
+  command -v "$_java"  &>/dev/null || { log_info "  java not found; install a JDK or set JAVA_HOME/HOCON_JAR"; return 1; }
+  command -v "$_javac" &>/dev/null || { log_info "  javac not found (JRE only?); install a JDK or set JAVA_HOME/HOCON_JAR"; return 1; }
 
   local target=$HOCON_JAR
   local target_dir; target_dir=$(dirname "$target")
@@ -41,7 +43,7 @@ _ensure_hocon_jar() {
   fi
 
   log_info "  compiling HoconToJson.java..."
-  if ! javac --release 17 -encoding UTF-8 -cp "$dep_tmp" \
+  if ! "$_javac" --release 17 -encoding UTF-8 -cp "$dep_tmp" \
        "${SHBANG_HOME}/tools/hocon-to-json/HoconToJson.java" -d "$fat_tmp" 2>/dev/null; then
     rm -rf "$dep_tmp" "$fat_tmp"
     log_info "  compile failed"
@@ -67,7 +69,7 @@ hocon_to_json() {
     || die "cannot build HOCON jar — install a JDK, check network access, or set HOCON_JAR"
   local tmp
   tmp=$(mktemp /tmp/shbang-ctx-XXXXXX.json)
-  java -jar "$HOCON_JAR" "$src" > "$tmp" \
+  "${JAVA_HOME:+${JAVA_HOME}/bin/}java" -jar "$HOCON_JAR" "$src" > "$tmp" \
     || { rm -f "$tmp"; die "HOCON conversion failed: $src"; }
   printf '%s' "$tmp"
 }
