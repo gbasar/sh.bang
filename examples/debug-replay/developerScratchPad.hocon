@@ -1,5 +1,43 @@
-# My investigation details — fill in what you are chasing.
+# Developer scratch pad — everything the developer fills in for their investigation.
 # In real use this file is gitignored and stays local to each developer.
+
+staging {
+  jumphost = "jumphost-1"
+  root     = "/home/deploy/staging"
+}
+
+archive {
+  date = "20260520"   # date tag of the rdat archive to pull (YYYYMMDD)
+}
+
+runtime {
+  javaHome = "/usr/bin/java"
+}
+
+trading {
+  shard {
+    "1" {
+      shard             = shard_1
+      host              = trading-host1
+      install.directory = /opt/trading
+    }
+    "2" {
+      shard             = shard_2
+      host              = trading-host1
+      install.directory = /opt/trading
+    }
+    "3" {
+      shard             = shard_3
+      host              = trading-host2
+      install.directory = /opt/trading
+    }
+    "4" {
+      shard             = shard_4
+      host              = trading-host2
+      install.directory = /opt/trading
+    }
+  }
+}
 
 debug {
   class     = OrderEventHandler
