@@ -7,7 +7,7 @@ staging {
 }
 
 archive {
-  date = "20260520"   # date tag of the rdat archive to pull (YYYYMMDD)
+  date = "20250522"   # date tag of the rdat archive to pull (YYYYMMDD)
 }
 
 debug {

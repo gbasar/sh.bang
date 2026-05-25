@@ -154,6 +154,17 @@ echo "[playground] copying replay-stub.jar to targets..."
 scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host1:/tmp/replay-stub.jar
 scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tmp/replay-stub.jar
 
+echo "[playground] setting up debug-replay fixtures (shard_1, jdwp=5005)..."
+BLACKBIRD_JAR="$REPO/tools/bluebird-stub/bluebird-stub.jar"
+if [[ -f $BLACKBIRD_JAR ]]; then
+  bb_create_debug_binaries trading-host1 "$INSTALL_BASE" shard_1 "$BLACKBIRD_JAR" 5005
+  bb_create_rdat trading-host1 "$INSTALL_BASE" shard_1 \
+    "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.in" \
+    "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.out"
+else
+  echo "[playground] WARNING: bluebird-stub.jar not found — debug-replay will not work"
+fi
+
 export SHBANG_SSH_KEY="$SSH_KEY"
 export SHBANG_SSH_CONFIG="$SSH_CONFIG"
 export HOCON_JAR="$REPO/tools/hocon-to-json/hocon.jar"
