@@ -1,5 +1,14 @@
-# Developer scratch pad — just the breakpoint I am chasing.
+# Developer scratch pad — my session config for this investigation.
 # In real use this file is gitignored and stays local to each developer.
+
+staging {
+  jumphost = "jumphost-1"
+  root     = "/home/deploy/staging"
+}
+
+archive {
+  date = "20260520"   # date tag of the rdat archive to pull (YYYYMMDD)
+}
 
 debug {
   class     = OrderEventHandler
