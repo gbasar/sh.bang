@@ -23,17 +23,17 @@ resources {
 }
 
 #! Create std Bluebird layout
-for_each ${trading.shard[*]}
+for_each ${trading.shard[${debug.shard}]}
 | @${staging.jumphost}:${staging.root} run mkdir -p ${shard}/trading/app/trading/{bin,lib} ${shard}/trading/config ${shard}/trading/data/trading/{archive,txn-log} ${shard}/trading/log/trading/archive
 
 #! Pull binaries and config from prod shard
-for_each ${trading.shard[*]}
+for_each ${trading.shard[${debug.shard}]}
 | @${host}:${install.directory}/${shard}/trading/app/trading/lib fetch ${staging.root}/${shard}/trading/app/trading/lib/
 | @${host}:${install.directory}/${shard}/trading/app/trading/bin fetch ${staging.root}/${shard}/trading/app/trading/bin/
 | @${host}:${install.directory}/${shard}/trading/config/environment.conf fetch ${staging.root}/${shard}/trading/config/
 
 #! Pull rdat archive from prod and unpack to txn-log
-for_each ${trading.shard[*]}
+for_each ${trading.shard[${debug.shard}]}
 | @${host}:${install.directory}/${shard}/trading/data/trading/archive fetch ${staging.root}/${shard}/trading/data/trading/archive/
 | @${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
 
