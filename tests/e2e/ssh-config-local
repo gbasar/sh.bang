@@ -1,0 +1,7 @@
+Host trading-host1
+  HostName localhost
+  Port 2221
+
+Host trading-host2
+  HostName localhost
+  Port 2222

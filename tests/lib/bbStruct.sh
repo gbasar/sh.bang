@@ -145,16 +145,7 @@ bb_create_debug_binaries() {
   _bb_ssh "$host" "$key" "
     cat > ${bin}/start <<SCRIPT
 #!/usr/bin/env bash
-echo \"[start] ${shard} starting with JDWP on port ${jdwp_port}\"
-exec java \\
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${jdwp_port} \\
-  -jar ${lib}/bluebird-stub.jar \\
-  ${txn_log}
-SCRIPT
-
-    cat > ${bin}/start-intellij <<SCRIPT
-#!/usr/bin/env bash
-echo \"[start-intellij] ${shard} waiting for debugger on port ${jdwp_port} (suspend=y)...\"
+echo \"[start] ${shard} waiting for debugger on port ${jdwp_port} (suspend=y)...\"
 exec java \\
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:${jdwp_port} \\
   -jar ${lib}/bluebird-stub.jar \\
@@ -174,7 +165,7 @@ sleep 1
 \$(dirname \$0)/start
 SCRIPT
 
-    chmod +x ${bin}/start ${bin}/start-intellij ${bin}/stop ${bin}/restart
+    chmod +x ${bin}/start ${bin}/stop ${bin}/restart
   "
 }
 

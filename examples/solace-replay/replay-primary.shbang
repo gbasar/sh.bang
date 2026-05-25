@@ -1,0 +1,18 @@
+#! Replay outbound messages on all shards (primary/directory format)
+
+resources {
+  replayJar = file://tools/replay-stub/replay-stub.jar
+  conf       = file://examples/solace-replay/trading1.hocon
+  trades     = file://examples/solace-replay/trades.csv
+}
+
+#! Prepare trade filter
+
+| @local run cat examples/solace-replay/trades.csv | tr -d '\r' | tr '\n' ',' | sed 's/,$//' -> tradeFilter
+
+#! Send jar and run replay on all shards
+
+for_each ${trading.shard[*]}
+| @${primary.host}:/tmp send ${replayJar}
+| @${primary.host}:${primary.directory}/trading/data/trading/archive run mkdir -p /tmp/replay-${shard} && tar xvf trading-data-20250522*.tar.gz -C /tmp/replay-${shard}
+| @${primary.host}:/tmp/replay-${shard} run ${runtime.javaHome} -jar /tmp/replay-stub.jar --rdat log.rdat.out --filter "tradeId in (${tradeFilter})"

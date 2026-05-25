@@ -6,7 +6,7 @@ parse_for_each_line() {
 
   out=()
 
-  if [[ $line =~ ^for_each[[:space:]]+\$\{([^}]*)\}[[:space:]]*$ ]]; then
+  if [[ $line =~ ^for_each[[:space:]]+\$\{(.+)\}[[:space:]]*$ ]]; then
     out[type]=for_each
     out[selector]=${BASH_REMATCH[1]}
     return 0

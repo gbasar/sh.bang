@@ -2,8 +2,8 @@
 # In real use this file is gitignored and stays local to each developer.
 
 staging {
-  jumphost = "jumphost-1"
-  root     = "/home/deploy/staging"
+  jumphost     = "trading-host1"   # SSH target (resolved via ssh-config-local in playground)
+  root         = "/opt/trading"
 }
 
 archive {
@@ -11,8 +11,8 @@ archive {
 }
 
 debug {
+  shard     = 1                    # which shard to target (matches trading.shard key)
   class     = OrderEventHandler
   method    = process
   condition = "orderId=ORD-12345"
-  jdwpPort  = 5005
 }

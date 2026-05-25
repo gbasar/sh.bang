@@ -13,14 +13,18 @@
 //   staging.root                       -- local staging root on jumphost
 //   staging.jumphost                   -- jumphost hostname
 //   archive.date                       -- date tag e.g. 20260520
+//   debug.shard                        -- shard key to target (e.g. 1 → trading.shard[1])
 //   debug.class                        -- class to break on (e.g. OrderEventHandler)
 //   debug.method                       -- method to break on (e.g. process)
 //   debug.condition                    -- local var condition (e.g. orderId=ORD-12345)
-//   debug.jdwpPort                     -- JDWP port on staging host (e.g. 5005)
+
+resources {
+  jdiAttacher = file://tools/jdi-attacher/jdi-attacher.jar
+}
 
 #! Create std Bluebird layout
 for_each ${trading.shard[*]}
-| ${staging.jumphost}:${staging.root} run mkdir -p ${shard}/trading/app/trading/{bin,lib} ${shard}/trading/config ${shard}/trading/data/trading/{archive,txn-log} ${shard}/trading/log/trading/archive
+| @${staging.jumphost}:${staging.root} run mkdir -p ${shard}/trading/app/trading/{bin,lib} ${shard}/trading/config ${shard}/trading/data/trading/{archive,txn-log} ${shard}/trading/log/trading/archive
 
 #! Pull binaries and config from prod shard
 for_each ${trading.shard[*]}
@@ -30,16 +34,17 @@ for_each ${trading.shard[*]}
 
 #! Pull rdat archive from prod and unpack to txn-log
 for_each ${trading.shard[*]}
-| @${host}:${install.directory}/${shard}/trading/data/trading/archive/trading-data-${archive.date}*.tar.gz fetch ${staging.root}/${shard}/trading/data/trading/archive/
-| ${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
+| @${host}:${install.directory}/${shard}/trading/data/trading/archive fetch ${staging.root}/${shard}/trading/data/trading/archive/
+| @${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
 
 #! Start app and arm breakpoint
 
-// Starts the app with JDWP open (suspend=n), then runs jdi-attacher with --hand-off.
-// jdi-attacher arms the conditional breakpoint, waits for rdat.in replay to hit it,
-// prints the local variables, and detaches — leaving the app suspended.
-// Connect IntelliJ to the printed host:port to walk in at the exact line.
+// Starts the target shard with JDWP open (suspend=y), then runs jdi-attacher with --hand-off.
+// jdi-attacher arms the conditional breakpoint, calls vm.resume(), waits for rdat.in replay
+// to hit the condition, prints locals, and detaches — leaving the JVM suspended.
+// Connect IntelliJ to staging.jumphost:debug.jdwpPort to walk in at the exact line.
+// debug.shard in developerScratchPad.hocon selects which shard to target.
 
-for_each ${trading.shard[*]}
-| #${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run ./start
-| #${staging.jumphost} run java --add-modules jdk.jdi -jar jdi-attacher.jar ${staging.jumphost}:${debug.jdwpPort} --class ${debug.class} --method ${debug.method} --condition ${debug.condition} --hand-off
+for_each ${trading.shard[${debug.shard}]}
+| @${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run nohup ./start > /tmp/${shard}-jdwp.log 2>&1 </dev/null &
+| @local run java --add-modules jdk.jdi -jar ${jdiAttacher} ${staging.jumphost} --class ${debug.class} --method ${debug.method} --condition ${debug.condition} --hand-off

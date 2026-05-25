@@ -1,30 +1,39 @@
 
 install {
-  directory = /local/1/trading
-  user = sysprod
-}
-
-logging {
-  level = warn
+  directory = /opt/trading
+  user = deploy
 }
 
 runtime {
-  javaHome = /usr/bin/java/jdk8
+  javaHome = /usr/bin/java
 }
 
-// i believe this is provided to the runtime at startup
+// Format 1: trading.shard is a direct map; each entry has primary and backup hosts.
 trading {
   shard {
+    1 {
+      primary.host = trading-host1
+      primary.directory = ${install.directory}"/shard_1"
+      backup.host = trading-host2
+      backup.directory = ${install.directory}"/shard_1"
+    }
+    2 {
+      primary.host = trading-host1
+      primary.directory = ${install.directory}"/shard_2"
+      backup.host = trading-host2
+      backup.directory = ${install.directory}"/shard_2"
+    }
+    3 {
+      primary.host = trading-host2
+      primary.directory = ${install.directory}"/shard_3"
+      backup.host = trading-host1
+      backup.directory = ${install.directory}"/shard_3"
+    }
     4 {
-      primary.host = hostName
+      primary.host = trading-host2
       primary.directory = ${install.directory}"/shard_4"
-      backup.host = otherHost
+      backup.host = trading-host1
       backup.directory = ${install.directory}"/shard_4"
     }
-    dr {
-      host = drhost
-      install.directory = ${install.directory}"/shard_dr"
-    }
-    5 {}
   }
 }

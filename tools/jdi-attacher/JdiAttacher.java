@@ -12,26 +12,28 @@ import java.util.*;
  * prints the thread, location, and local variables, then resumes. Ctrl+C detaches.
  *
  * Usage:
- *   java --add-modules jdk.jdi -jar jdi-attacher.jar <host:port> \
+ *   java --add-modules jdk.jdi -jar jdi-attacher.jar <host> \
  *        [--class <class>] [--method <method>] [--condition <expr>=<value>] [--hand-off]
+ *
+ * JDWP port is fixed at 5005 — standardised across all Bluebird staging environments.
  *
  * Examples:
  *   # break on class load
- *   jdi-attacher localhost:5005 --class OrderEventHandler
+ *   jdi-attacher trading-host1 --class OrderEventHandler
  *
  *   # break on method entry
- *   jdi-attacher localhost:5005 --class OrderEventHandler --method process
+ *   jdi-attacher trading-host1 --class OrderEventHandler --method process
  *
  *   # conditional — local variable
- *   jdi-attacher localhost:5005 --class OrderEventHandler --method process \
+ *   jdi-attacher trading-host1 --class OrderEventHandler --method process \
  *                --condition orderId=ORD-12345
  *
  *   # conditional — field on object parameter
- *   jdi-attacher localhost:5005 --class TradeEventHandler --method process \
+ *   jdi-attacher trading-host1 --class TradeEventHandler --method process \
  *                --condition m.tradeId=TRD-12345
  *
  *   # conditional — deep field chain
- *   jdi-attacher localhost:5005 --class TradeEventHandler --method process \
+ *   jdi-attacher trading-host1 --class TradeEventHandler --method process \
  *                --condition m.order.instrumentId=TSLA
  *
  * Notes:
@@ -44,15 +46,16 @@ import java.util.*;
  */
 public class JdiAttacher {
 
+    static final int DEFAULT_PORT = 5005;
+
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
-            System.err.println("Usage: JdiAttacher <host:port> [--class <class>] [--method <method>] [--condition <expr>=<value>]");
+            System.err.println("Usage: JdiAttacher <host> [--class <class>] [--method <method>] [--condition <expr>=<value>]");
             System.exit(1);
         }
 
-        String[] hostPort    = args[0].split(":", 2);
-        String host          = hostPort[0];
-        int    port          = Integer.parseInt(hostPort[1]);
+        String host          = args[0];
+        int    port          = DEFAULT_PORT;
         String  targetClass   = null;
         String  targetMethod  = null;
         String  condExpr      = null;

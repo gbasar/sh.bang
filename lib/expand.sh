@@ -31,8 +31,10 @@ render_vars() {
     # 1. try the shard node
     value=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r ".${path} // empty" <<< "$node_json" 2>/dev/null || true)
     # 2. fall back to full context JSON (top-level fields like runtime.javaHome)
+    # No MSYS_NO_PATHCONV here — the file path needs MSYS conversion on Windows
+    # (ctx may be a /tmp/... temp file that jq can only reach via its Windows path)
     if [[ -z $value ]]; then
-      value=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r ".${path} // empty" "${SHBANG_RT[ctx]}" 2>/dev/null || true)
+      value=$(jq -r ".${path} // empty" "${SHBANG_RT[ctx]}" 2>/dev/null || true)
     fi
     # 3. fall back to SHBANG_RT (captured locals like tradeFilter)
     if [[ -z $value && -n ${SHBANG_RT[$path]:-} ]]; then
@@ -50,7 +52,6 @@ declare -A EXPAND_HANDLERS=(
   [parser.resource]=expand_resource
   [parser.for_each]=expand_for_each
   [parser.pipe]=expand_pipe
-  [parser.local]=expand_local
 )
 
 # Accumulate resource declarations during parse; resolved lazily before first pipe.
@@ -80,27 +81,25 @@ event_expand() {
 expand_for_each() {
   local -n ef_event=$1
   _ensure_resources_resolved
-  SHBANG_RT[_expand_selector]=${ef_event[selector]}
-}
-
-expand_local() {
-  local -n el_event=$1
-  local cmd
-  cmd=$(render_vars "${el_event[cmd]}" "{}")
-  local result
-  result=$(bash -c "$cmd")
-  SHBANG_RT[${el_event[capture]}]=$result
-  log_debug "local: captured ${el_event[capture]}=${result}"
+  local selector
+  selector=$(render_vars "${ef_event[selector]}" "{}")
+  SHBANG_RT[_expand_selector]=$selector
 }
 
 expand_pipe() {
   local -n ep_event=$1
 
   local selector=${SHBANG_RT[_expand_selector]:-}
-  [[ -n $selector ]] || return 0
 
-  local jq_path
-  jq_path=$(selector_to_jq "$selector")
+  # No for_each in scope — run once against the full context (bare pipe)
+  local jq_path node_json_src
+  if [[ -z $selector ]]; then
+    jq_path=
+    node_json_src=bare
+  else
+    jq_path=$(selector_to_jq "$selector")
+    node_json_src=ctx
+  fi
 
   local node_json
   while IFS= read -r node_json; do
@@ -115,7 +114,25 @@ expand_pipe() {
     local prefix=${subject:0:1}
     local host_path=${subject:1}
     local host=${host_path%%:*}
-    local path=${host_path#*:}
+    local path
+    if [[ $host_path == *:* ]]; then path=${host_path#*:}; else path=""; fi
+
+    # @local — queue for in-order execution on this machine
+    if [[ $prefix == @ && $host == local ]]; then
+      local capture=""
+      if [[ $args =~ (.*)[[:space:]]-\>[[:space:]]([^[:space:]]+)$ ]]; then
+        args=${BASH_REMATCH[1]}
+        capture=${BASH_REMATCH[2]}
+      fi
+      local local_cmd="$args"
+      [[ -n $path ]] && local_cmd="cd ${path} && ${args}"
+      _CMD_QUEUE+=("$(jq -cn \
+        --arg type    "cmd.local" \
+        --arg cmd     "$local_cmd" \
+        --arg capture "$capture" \
+        '{type:$type,cmd:$cmd,capture:$capture}')")
+      continue
+    fi
 
     local cmd_type
     case $prefix in
@@ -124,7 +141,6 @@ expand_pipe() {
           send|fetch) cmd_type=cmd.scp ;;
           *)          cmd_type=cmd.ssh ;;
         esac ;;
-      '#') cmd_type=cmd.ssh ;;
       *)  log_debug "expand: unknown subject prefix in: $subject"; continue ;;
     esac
 
@@ -140,5 +156,11 @@ expand_pipe() {
       --arg args    "$args"     \
       '{type:$type,user:$user,host:$host,path:$path,verb:$verb,args:$args}')")
 
-  done < <(jq -c "$jq_path" "${SHBANG_RT[ctx]}")
+  done < <(
+    if [[ $node_json_src == bare ]]; then
+      echo '{}'
+    else
+      jq -c "$jq_path" "${SHBANG_RT[ctx]}"
+    fi
+  )
 }

@@ -3,6 +3,7 @@
 declare -A CMD_DISPATCH=(
   [cmd.scp]=dispatch_scp
   [cmd.ssh]=dispatch_ssh
+  [cmd.local]=dispatch_local
 )
 
 # ControlMaster: one TCP/TLS handshake per host per run.
@@ -35,6 +36,8 @@ event_dispatch() {
   [[ -n $fn ]] || return 0
 
   if [[ ${SHBANG_RT[dry_run]} == true ]]; then
+    # cmd.local: console handler already printed; skip execution
+    [[ $type == cmd.local ]] && return 0
     local verb=${ed_event[verb]}
     local label
     label=$(jq -r --arg v "$verb" \
@@ -59,14 +62,14 @@ dispatch_queue() {
   local -A dq_event
   for entry in "${_CMD_QUEUE[@]}"; do
     dq_event=(
-
-      #	Parse `$entry` as JSON, extract `.host`, and if it's missing produce an empty string rather than
       [type]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.type // empty' <<< "$entry")
       [user]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.user // "deploy"' <<< "$entry")
       [host]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.host // empty' <<< "$entry")
       [path]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.path // empty' <<< "$entry")
       [verb]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.verb // empty' <<< "$entry")
       [args]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.args // empty' <<< "$entry")
+      [cmd]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.cmd // empty' <<< "$entry")
+      [capture]=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r '.capture // empty' <<< "$entry")
     )
     emit dq_event
   done
@@ -108,4 +111,18 @@ dispatch_ssh() {
       -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
     *)   log_debug "dispatch_ssh: unknown verb: $verb" ;;
   esac
+}
+
+dispatch_local() {
+  local -n dl_event=$1
+  local cmd=${dl_event[cmd]}
+  local capture=${dl_event[capture]}
+  if [[ -n $capture ]]; then
+    local result
+    result=$(bash -c "$cmd" 2>&1)
+    SHBANG_RT[$capture]=$result
+    log_debug "local: captured ${capture}=${result}"
+  else
+    bash -c "$cmd" 2>&1 | sed 's/^/│  /'
+  fi
 }
