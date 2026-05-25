@@ -13,6 +13,10 @@
 //   staging.root                       -- local staging root on jumphost
 //   staging.jumphost                   -- jumphost hostname
 //   archive.date                       -- date tag e.g. 20260520
+//   debug.class                        -- class to break on (e.g. OrderEventHandler)
+//   debug.method                       -- method to break on (e.g. process)
+//   debug.condition                    -- local var condition (e.g. orderId=ORD-12345)
+//   debug.jdwpPort                     -- JDWP port on staging host (e.g. 5005)
 
 #! Create std Bluebird layout
 # maybe our first gap, we def don't want to do thus fir every shard also we are making the drecotry layout somehwee perhaps not specificed in the config right a jummphost
@@ -32,13 +36,13 @@ for_each ${trading.shard[*]}
 | @${host}:${install.directory}/${shard}/trading/data/trading/archive/trading-data-${archive.date}*.tar.gz fetch ${staging.root}/${shard}/trading/data/trading/archive/
 | ${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
 
-#! Patch for debug mode and start
+#! Start app and arm breakpoint
 
-// Flips MODE to DEBUG in environment.conf and injects JDWP flags into start.
-// The process will suspend on startup waiting for a remote debugger on port 5005.
-// Connect via IntelliJ: Run > Attach to Process > host:5005
+// Starts the app with JDWP open (suspend=n), then runs jdi-attacher with --hand-off.
+// jdi-attacher arms the conditional breakpoint, waits for rdat.in replay to hit it,
+// prints the local variables, and detaches — leaving the app suspended.
+// Connect IntelliJ to the printed host:port to walk in at the exact line.
 
 for_each ${trading.shard[*]}
-| #${staging.jumphost}:${staging.root}/${shard}/trading/config run sed -i 's/MODE=.*/MODE=DEBUG/' environment.conf
-| #${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run sed -i 's/trading\.main\.Start/trading.main.Start -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005/' start
 | #${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run ./start
+| #${staging.jumphost} run java --add-modules jdk.jdi -jar jdi-attacher.jar ${staging.jumphost}:${debug.jdwpPort} --class ${debug.class} --method ${debug.method} --condition ${debug.condition} --hand-off
