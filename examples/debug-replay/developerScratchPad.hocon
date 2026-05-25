@@ -1,5 +1,9 @@
-# My investigation — override debug.* from environment.conf here.
-# In real use this file stays local (gitignored). In the demo it's committed
-# to show developers what they'd put in their own copy.
+# My investigation details — fill in what you are chasing.
+# In real use this file is gitignored and stays local to each developer.
 
-debug.condition = "orderId=ORD-12345"
+debug {
+  class     = OrderEventHandler
+  method    = process
+  condition = "orderId=ORD-12345"
+  jdwpPort  = 5005
+}
