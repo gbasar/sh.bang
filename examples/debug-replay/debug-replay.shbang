@@ -46,5 +46,6 @@ for_each ${trading.shard[${debug.shard}]}
 // debug.shard in developerScratchPad.hocon selects which shard to target.
 
 for_each ${trading.shard[${debug.shard}]}
-| @${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run nohup ./start > /tmp/${shard}-jdwp.log 2>&1 </dev/null &
+| @${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run setsid nohup ./start > /tmp/${shard}-jdwp.log 2>&1 </dev/null &
+| @local run sleep 3
 | @local run java --add-modules jdk.jdi -jar ${jdiAttacher} ${staging.jumphost} --class ${debug.class} --method ${debug.method} --condition ${debug.condition} --hand-off
