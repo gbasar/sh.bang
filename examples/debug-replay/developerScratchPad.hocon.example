@@ -1,0 +1,12 @@
+# Copy this to developerScratchPad.hocon (same directory) and edit.
+# That file is gitignored — your investigation details stay local.
+#
+# Override any debug.* key from environment.conf:
+
+debug.condition = "orderId=ORD-12345"
+
+# Other examples:
+#   debug.condition = "orderId=ORD-99999"
+#   debug.condition = "m.tradeId=TRD-00042"
+#   debug.class     = TradeEventHandler
+#   debug.method    = process
