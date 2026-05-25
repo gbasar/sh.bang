@@ -6,7 +6,10 @@
 #   source bin/playground          # sets env vars in your shell
 #   bin/playground --stop          # tear down containers
 #   bin/playground --status        # show container state
-set -euo pipefail
+
+# Only apply strict mode when executed as a script, not when sourced.
+# Sourcing with set -e would kill the user's terminal on any error.
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] || set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SSH_CONFIG="$REPO/.playground-ssh-config"
