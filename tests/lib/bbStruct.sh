@@ -21,8 +21,6 @@
 #   $E2E_SSH_CONFIG env var — if set, passed as -F to all ssh/scp calls
 #   Useful for playground where hosts resolve via a local SSH config file
 
-set -euo pipefail
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
