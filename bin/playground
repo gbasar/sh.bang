@@ -165,6 +165,7 @@ if [[ -z ${JAVA_HOME:-} ]]; then
   done
   unset _jh
 fi
+[[ -n ${JAVA_HOME:-} && $PATH != *"${JAVA_HOME}/bin"* ]] && export PATH="${JAVA_HOME}/bin:${PATH}"
 
 echo
 echo "[playground] ready. env vars set:"
