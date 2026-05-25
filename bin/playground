@@ -84,7 +84,7 @@ _debug_replay() {
   echo "[playground]   on hit: attach IntelliJ to localhost:${port}"
   echo
   java --add-modules jdk.jdi -jar "$REPO/tools/jdi-attacher/jdi-attacher.jar" \
-    "localhost:${port}" \
+    "trading-host${host_idx}" \
     --class  "$class" \
     --method "$method" \
     --condition "$condition" \
@@ -153,11 +153,13 @@ scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tm
 
 export SHBANG_SSH_KEY="$SSH_KEY"
 export SHBANG_SSH_CONFIG="$SSH_CONFIG"
+export HOCON_JAR="$REPO/tools/hocon-to-json/hocon.jar"
 
 echo
 echo "[playground] ready. env vars set:"
 echo "  SHBANG_SSH_KEY=$SHBANG_SSH_KEY"
 echo "  SHBANG_SSH_CONFIG=$SHBANG_SSH_CONFIG"
+echo "  HOCON_JAR=$HOCON_JAR"
 echo
 echo "  ssh -F $SSH_CONFIG trading-host1"
 echo "  ssh -F $SSH_CONFIG trading-host2"
