@@ -93,12 +93,12 @@ echo
 echo "--- running playbook ---"
 _LOG=$(mktemp)
 if [[ $STREAM == true ]]; then
-  "$BIN" run "$ROOT/examples/replay/replay.shbang" \
-    --ctx "$ROOT/examples/replay/environment.json" 2>&1 | tee "$_LOG"
+  "$BIN" run "$ROOT/examples/solace-replay/replay.shbang" \
+    --ctx "$ROOT/examples/solace-replay/environment.json" 2>&1 | tee "$_LOG"
   OUTPUT=$(cat "$_LOG")
 else
-  OUTPUT=$("$BIN" run "$ROOT/examples/replay/replay.shbang" \
-    --ctx "$ROOT/examples/replay/environment.json" 2>&1)
+  OUTPUT=$("$BIN" run "$ROOT/examples/solace-replay/replay.shbang" \
+    --ctx "$ROOT/examples/solace-replay/environment.json" 2>&1)
   echo "$OUTPUT"
 fi
 rm -f "$_LOG"

@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# Start target1/target2 SSH servers, write SSH config, and install fixture data.
+# Meant to be sourced: sets SHBANG_SSH_KEY, SHBANG_SSH_CONFIG, HOCON_JAR, JAVA_HOME.
+#
+# Usage:
+#   source bin/playground          # delegates here via bin/playground
+
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] || set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SSH_CONFIG="$REPO/.playground-ssh-config"
+SSH_KEY="$REPO/tests/e2e/e2e_test_key"
+
+_wait_for_ssh() {
+  local host=$1 port=$2
+  local i=0
+  printf "[playground] waiting for %s..." "$host"
+  while ! ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+              -o ConnectTimeout=2 -i "$SSH_KEY" \
+              -p "$port" deploy@localhost true 2>/dev/null; do
+    sleep 1
+    i=$(( i + 1 ))
+    if (( i > 30 )); then
+      echo " timeout"
+      return 1
+    fi
+    printf '.'
+  done
+  echo " ready"
+}
+
+echo "[playground] building images..."
+docker compose -f "$REPO/docker-compose.yml" build e2e target1 target2
+
+echo "[playground] extracting compiled jars from e2e image..."
+_cid=$(docker create shbang-e2e:latest)
+docker cp "$_cid:/app/tools/bluebird-stub/bluebird-stub.jar" "$REPO/tools/bluebird-stub/"
+docker cp "$_cid:/app/tools/jdi-attacher/jdi-attacher.jar"  "$REPO/tools/jdi-attacher/"
+docker rm "$_cid"
+
+echo "[playground] starting target1, target2..."
+docker compose -f "$REPO/docker-compose.yml" up -d target1 target2
+
+_wait_for_ssh trading-host1 2221
+_wait_for_ssh trading-host2 2222
+
+cat > "$SSH_CONFIG" <<EOF
+Host trading-host1
+  HostName localhost
+  Port 2221
+  User deploy
+  IdentityFile $SSH_KEY
+  StrictHostKeyChecking no
+  BatchMode yes
+  KexAlgorithms ecdh-sha2-nistp256
+
+Host trading-host2
+  HostName localhost
+  Port 2222
+  User deploy
+  IdentityFile $SSH_KEY
+  StrictHostKeyChecking no
+  BatchMode yes
+  KexAlgorithms ecdh-sha2-nistp256
+EOF
+
+export E2E_SSH_KEY="$SSH_KEY"
+export E2E_SSH_CONFIG="$SSH_CONFIG"
+source "$REPO/tests/lib/bbStruct.sh"
+
+echo "[playground] setting up fixture data on targets..."
+FIXTURE_DIR="$REPO/tests/e2e/fixtures"
+INSTALL_BASE="/opt/trading"
+DATE_TAG="20250522"
+
+for shard in shard_1 shard_2; do
+  echo "[playground]   $shard → trading-host1"
+  bb_create_shard_layout trading-host1 "$INSTALL_BASE" "$shard"
+  bb_create_binaries     trading-host1 "$INSTALL_BASE" "$shard"
+  bb_create_archive      trading-host1 "$INSTALL_BASE" "$shard" "$DATE_TAG" "$FIXTURE_DIR/$shard"
+done
+
+for shard in shard_3 shard_4; do
+  echo "[playground]   $shard → trading-host2"
+  bb_create_shard_layout trading-host2 "$INSTALL_BASE" "$shard"
+  bb_create_binaries     trading-host2 "$INSTALL_BASE" "$shard"
+  bb_create_archive      trading-host2 "$INSTALL_BASE" "$shard" "$DATE_TAG" "$FIXTURE_DIR/$shard"
+done
+
+echo "[playground] copying replay-stub.jar to targets..."
+scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host1:/tmp/replay-stub.jar
+scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tmp/replay-stub.jar
+
+echo "[playground] setting up debug-replay fixtures (shard_1, jdwp=5005)..."
+BLACKBIRD_JAR="$REPO/tools/bluebird-stub/bluebird-stub.jar"
+if [[ -f $BLACKBIRD_JAR ]]; then
+  bb_create_debug_binaries trading-host1 "$INSTALL_BASE" shard_1 "$BLACKBIRD_JAR" 5005
+  bb_create_rdat trading-host1 "$INSTALL_BASE" shard_1 \
+    "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.in" \
+    "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.out"
+else
+  echo "[playground] WARNING: bluebird-stub.jar not found — debug-replay will not work"
+fi
+
+export SHBANG_SSH_KEY="$SSH_KEY"
+export SHBANG_SSH_CONFIG="$SSH_CONFIG"
+export HOCON_JAR="$REPO/tools/hocon-to-json/hocon.jar"
+
+if [[ -z ${JAVA_HOME:-} ]]; then
+  for _jh in "/c/d/i/jdk-25.0.3+9" "/usr/lib/jvm/java-17" "/usr/lib/jvm/java-17-openjdk"; do
+    [[ -x "${_jh}/bin/java" ]] && { export JAVA_HOME="$_jh"; break; }
+  done
+  unset _jh
+fi
+[[ -n ${JAVA_HOME:-} && $PATH != *"${JAVA_HOME}/bin"* ]] && export PATH="${JAVA_HOME}/bin:${PATH}"
+
+echo
+echo "[playground] ready. env vars set:"
+echo "  SHBANG_SSH_KEY=$SHBANG_SSH_KEY"
+echo "  SHBANG_SSH_CONFIG=$SHBANG_SSH_CONFIG"
+echo "  HOCON_JAR=$HOCON_JAR"
+[[ -n ${JAVA_HOME:-} ]] && echo "  JAVA_HOME=$JAVA_HOME"
+echo
+echo "  ssh -F $SSH_CONFIG trading-host1"
+echo "  ssh -F $SSH_CONFIG trading-host2"
+echo
+echo "  bin/sh.bang run examples/solace-replay/replay.shbang --ctx examples/solace-replay/environment.json"
+echo
+echo "[playground] debug-replay (always tears down and reinstalls fresh, picks a free JDWP port):"
+echo "  bin/playground --debug-replay          [shard] [class] [method] [condition]  — jdi-attacher trace"
+echo "  bin/playground --debug-replay-intellij [shard] [class] [method] [condition]  — IntelliJ suspend=y"
+echo "  defaults: shard_1  OrderEventHandler  process  orderId=ORD-12345"
+echo
+echo "[playground] tip: 'source bin/playground' to set env vars in your current shell"
+echo "             'bin/playground --stop' to tear down"

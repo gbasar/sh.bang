@@ -4,15 +4,72 @@
 # Override with HOCON_JAR env var; default matches Dockerfile install path.
 : "${HOCON_JAR:=/usr/local/lib/hocon.jar}"
 
+# Typesafe Config version used for the fat-jar build.
+: "${TYPESAFE_CONFIG_VERSION:=1.4.3}"
+
+# If HOCON_JAR is missing, download typesafe-config from Maven Central, compile
+# HoconToJson.java, and package a fat jar.  Falls back to writing alongside the
+# source when the default install path isn't writable (local dev).
+_ensure_hocon_jar() {
+  [[ -f $HOCON_JAR ]] && return 0
+
+  log_info "HOCON jar not found at ${HOCON_JAR} — building from Maven Central..."
+
+  local _java="${JAVA_HOME:+${JAVA_HOME}/bin/}java"
+  local _javac="${JAVA_HOME:+${JAVA_HOME}/bin/}javac"
+  command -v "$_java"  &>/dev/null || { log_info "  java not found; install a JDK or set JAVA_HOME/HOCON_JAR"; return 1; }
+  command -v "$_javac" &>/dev/null || { log_info "  javac not found (JRE only?); install a JDK or set JAVA_HOME/HOCON_JAR"; return 1; }
+
+  local target=$HOCON_JAR
+  local target_dir; target_dir=$(dirname "$target")
+
+  # Fall back to writing alongside source if install path isn't writable
+  if [[ ! -w $target_dir ]]; then
+    target="${SHBANG_HOME}/tools/hocon-to-json/hocon.jar"
+    log_info "  ${target_dir} not writable — building to ${target}"
+    HOCON_JAR=$target
+  fi
+
+  local url="https://repo1.maven.org/maven2/com/typesafe/config/${TYPESAFE_CONFIG_VERSION}/config-${TYPESAFE_CONFIG_VERSION}.jar"
+  local dep_tmp fat_tmp
+  dep_tmp=$(mktemp /tmp/shbang-typesafe-XXXXXX.jar)
+  fat_tmp=$(mktemp -d /tmp/shbang-hocon-fat-XXXXXX)
+
+  log_info "  downloading typesafe-config ${TYPESAFE_CONFIG_VERSION}..."
+  if ! shbang_curl -fsSL "$url" -o "$dep_tmp"; then
+    rm -rf "$dep_tmp" "$fat_tmp"
+    log_info "  download failed"
+    return 1
+  fi
+
+  log_info "  compiling HoconToJson.java..."
+  if ! "$_javac" --release 17 -encoding UTF-8 -cp "$dep_tmp" \
+       "${SHBANG_HOME}/tools/hocon-to-json/HoconToJson.java" -d "$fat_tmp" 2>/dev/null; then
+    rm -rf "$dep_tmp" "$fat_tmp"
+    log_info "  compile failed"
+    return 1
+  fi
+
+  (cd "$fat_tmp" && jar xf "$dep_tmp" 2>/dev/null)
+  if ! jar cfe "$HOCON_JAR" HoconToJson -C "$fat_tmp" .; then
+    rm -rf "$dep_tmp" "$fat_tmp"
+    log_info "  jar packaging failed"
+    return 1
+  fi
+
+  rm -rf "$dep_tmp" "$fat_tmp"
+  log_info "  HOCON jar ready: ${HOCON_JAR}"
+}
+
 # Convert a HOCON file to a temp JSON file; prints the temp path to stdout.
 # Caller is responsible for cleanup: rm "$tmp"
 hocon_to_json() {
   local src=$1
-  [[ -f $HOCON_JAR ]] \
-    || die "HOCON jar not found: $HOCON_JAR  (set HOCON_JAR env var or supply HOCON_JAR_URL at image build time)"
+  _ensure_hocon_jar \
+    || die "cannot build HOCON jar — install a JDK, check network access, or set HOCON_JAR"
   local tmp
   tmp=$(mktemp /tmp/shbang-ctx-XXXXXX.json)
-  java -jar "$HOCON_JAR" "$src" > "$tmp" \
+  "${JAVA_HOME:+${JAVA_HOME}/bin/}java" -jar "$HOCON_JAR" "$src" > "$tmp" \
     || { rm -f "$tmp"; die "HOCON conversion failed: $src"; }
   printf '%s' "$tmp"
 }
@@ -57,10 +114,11 @@ resolve_ctx() {
     ctx=$downloaded
   fi
 
-  # Convert HOCON → JSON if needed
-  if [[ $ctx == *.hocon ]]; then
+  # Convert HOCON → JSON if needed (.hocon or .conf are both HOCON)
+  if [[ $ctx == *.hocon || $ctx == *.conf ]]; then
     local json_tmp
-    json_tmp=$(hocon_to_json "$ctx")
+    # hocon_to_json calls die() in a subshell — $() masks the exit code, so check explicitly
+    json_tmp=$(hocon_to_json "$ctx") || exit $?
     [[ -n $downloaded ]] && rm -f "$downloaded"
     printf '%s' "$json_tmp"
     return

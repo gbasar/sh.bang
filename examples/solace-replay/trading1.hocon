@@ -1,0 +1,39 @@
+
+install {
+  directory = /opt/trading
+  user = deploy
+}
+
+runtime {
+  javaHome = /usr/bin/java
+}
+
+// Format 1: trading.shard is a direct map; each entry has primary and backup hosts.
+trading {
+  shard {
+    1 {
+      primary.host = trading-host1
+      primary.directory = ${install.directory}"/shard_1"
+      backup.host = trading-host2
+      backup.directory = ${install.directory}"/shard_1"
+    }
+    2 {
+      primary.host = trading-host1
+      primary.directory = ${install.directory}"/shard_2"
+      backup.host = trading-host2
+      backup.directory = ${install.directory}"/shard_2"
+    }
+    3 {
+      primary.host = trading-host2
+      primary.directory = ${install.directory}"/shard_3"
+      backup.host = trading-host1
+      backup.directory = ${install.directory}"/shard_3"
+    }
+    4 {
+      primary.host = trading-host2
+      primary.directory = ${install.directory}"/shard_4"
+      backup.host = trading-host1
+      backup.directory = ${install.directory}"/shard_4"
+    }
+  }
+}

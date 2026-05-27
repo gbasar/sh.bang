@@ -50,12 +50,8 @@ fmt_local() {
 fmt_scp() {
   local arrow=$1 host=$2 path=$3 args=$4
   if _is_fancy; then
-    local icon
-    case $arrow in
-      '↑') icon="$ICON_UPLOAD" ;;
-      '↓') icon="$ICON_DOWNLOAD" ;;
-      *)   icon='·' ;;
-    esac
+    local -A _arrow_icon=(['↑']="$ICON_UPLOAD" ['↓']="$ICON_DOWNLOAD")
+    local icon=${_arrow_icon[$arrow]}
     printf "├─ ${C_SCP}%s${C_RESET}  ${C_HOST}@%s${C_RESET}${C_PATH}:%s${C_RESET}  %s\n" \
       "$icon" "$host" "$path" "$args"
   else

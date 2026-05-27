@@ -11,8 +11,8 @@ declare -A CONSOLE_EVENT_FORMATTERS=(
   [run.loaded]=console_run_loaded
   [parser.for_each]=console_parser_for_each
   [parser.pipe]=console_parser_pipe
-  [parser.local]=console_parser_local
   [parser.label]=console_parser_label
+  [cmd.local]=console_cmd_local
   [cmd.scp]=console_cmd_scp
   [cmd.ssh]=console_cmd_ssh
 )
@@ -31,7 +31,6 @@ emit() {
   done
 }
 
-# what the fuck is shift again?
 emit_kv() {
   local type=$1
   shift
@@ -80,19 +79,15 @@ console_parser_label() {
   fmt_label "${event[text]}"
 }
 
-console_parser_local() {
+console_cmd_local() {
   local -n event=$1
   fmt_local "${event[cmd]}" "${event[capture]}"
 }
 
 console_cmd_scp() {
   local -n event=$1
-  local arrow
-  case ${event[verb]} in
-    send)  arrow='↑' ;;
-    fetch) arrow='↓' ;;
-    *)     arrow='·' ;;
-  esac
+  local -A _verb_arrow=([send]='↑' [fetch]='↓')
+  local arrow=${_verb_arrow[${event[verb]}]}
   fmt_scp "$arrow" "${event[host]}" "${event[path]}" "${event[args]}"
 }
 

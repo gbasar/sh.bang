@@ -1,107 +1,130 @@
 # Handoff Note
 
-**Branch:** `feature/e2e-replay` (PR #5 open, not merged yet)
+> **Note:** This handoff was written after Claude (Anthropic claude-sonnet-4-6, flagship model) spent 2+ hours on this branch, declared the task done without testing, then failed to fix or even correctly diagnose the `--trace-after-hit` bug across a dozen attempts. The root cause is probably one line. Codex: don't repeat this.
+
+**Branch:** `debug-play`
 **Base:** `main`
-**Tests:** 26 passed, 0 failed
 
 ---
 
-## Where we are
+## What was done this session
 
-Design and docs are solid. Engine handles the replay playbook end-to-end in dry-run.
-The next session goal is getting `docker compose run --rm e2e` green.
+### examples/debug-replay/debug-replay.shbang — DONE
+Added 4 missing context keys to the header and the matching jdi-attacher flags to the Option 1 trace command:
+- `debug.render`, `debug.fieldDepth`, `debug.fieldMax`, `debug.maxStringLen`
+- Command now includes: `--render ${debug.render} --field-depth ${debug.fieldDepth} --field-max ${debug.fieldMax} --max-string-len ${debug.maxStringLen}`
+- Fixed Option 1 comment: "use start: suspend=y" (was wrong: "use start-trace: suspend=n")
 
----
-
-## What was built this session
-
-### Engine changes
-- `lib/parser.sh` — skips `#!` labels, skips `resources {}` block, parses `$ run cmd -> varName`
-- `lib/expand.sh` — table-driven handlers, `expand_local` runs local cmd and stores in `SHBANG_RT`,
-  `render_vars` falls back: shard node → full context JSON → SHBANG_RT (for tradeFilter etc.),
-  selector auto-`[]` fix (was mangling named keys like `[primary]`), MSYS_NO_PATHCONV on jq calls
-- `lib/events.sh` — `parser.local` console formatter added
-- `lib/dispatch.sh` — jq `// empty` fallbacks, no more error noise
-
-### Replay example
-- `examples/replay/replay.shbang` — full playbook with `$ local` + `for_each`
-- `examples/replay/environment.json` — JSON context, 4 shards across 2 hosts (target1/target2)
-- `examples/replay/environment.conf` — HOCON version (needs HOCON jar, only works at work)
-- `examples/replay/trades.csv` — trade_001..trade_005
-- `examples/replay/trading1.hocon` + `trading2.hocon` — prod/SIT reference formats (keep these)
-
-### Fake replay Java stub
-- `tools/replay-stub/ReplayStub.java` — reads rdat file, prints `Replayed X` or `Skipped X`
-- `tools/replay-stub/build.sh` — compile with javac + jar
-- `tools/replay-stub/replay-stub.jar` — pre-built with JDK25 locally
-
-### e2e infrastructure
-- `tests/e2e/fixtures/shard_{1..4}/log.rdat.out` — 2 matching trades + 8 others per shard
-- `tests/e2e/setup-target.sh` — tars fixtures, SCPs to target hosts, creates dirs
-- `tests/e2e/run-e2e.sh` — full runner: setup → build jar → run playbook → assert output
-- `docker-compose.yml` — target1, target2 (Fedora+sshd), e2e service
-- `Dockerfile.server` — SSH key injection via entrypoint
-- `docker/server-entrypoint.sh` — injects SSH_PUBKEY env var into authorized_keys, starts sshd
+All other files (debug-replay-trace.shbang, debug-replay-intellij.shbang, developerScratchPad.hocon, OrderEventMessage.java, BluebirdStub.java, OrderEventHandler.java, bbStruct.sh, bin/playground) were already complete.
 
 ---
 
-## What needs to happen next session
+## Update: --trace-after-hit is functional, with rendering caveats
 
-### 1. SSH keypair for e2e
-Generate a keypair for the e2e test:
-```bash
-ssh-keygen -t ed25519 -f tests/e2e/e2e_key -N ""
-```
-Pass to docker compose via env:
-```bash
-SSH_PUBKEY=$(cat tests/e2e/e2e_key.pub) SSH_PRIVKEY=tests/e2e/e2e_key docker compose run --rm e2e
-```
-Add `tests/e2e/e2e_key*` to `.gitignore`.
+Codex update: `--trace-after-hit` now attaches, hits `ORD-12345`, traces through the
+whole `OrderEventHandler.process(...)` event handler, and exits with
+`[jdi] trace complete`.
 
-### 2. Verify docker compose builds
-```bash
-docker compose build target1 target2 e2e
-```
-Check Dockerfile.server installs sshd correctly on ubi9.
+Validated with:
 
-### 3. Wire SSH key into e2e runner
-`tests/e2e/run-e2e.sh` accepts `SSH_PRIVKEY` env var already.
-`setup-target.sh` accepts it as third arg already.
-Just needs the keypair generated (step 1).
-
-### 4. Run e2e
 ```bash
-SSH_PUBKEY=$(cat tests/e2e/e2e_key.pub) \
-SSH_PRIVKEY=/path/to/e2e_key \
-docker compose run --rm e2e
+./bin/playground --debug-replay-intellij
+/c/d/i/jdk-25.0.3+9/bin/java --add-modules jdk.jdi \
+  -jar tools/jdi-attacher/jdi-attacher.jar localhost --port 5005 \
+  --class com.bluebird.trading.OrderEventHandler --method process \
+  --condition orderId=ORD-12345 \
+  --trace-after-hit --trace-filter com.bluebird.trading.* --trace-limit 500 \
+  --debug-jdi
 ```
 
-### 5. Merge PR #5 once e2e is green
+Current useful behavior:
+
+- no hang in the validation run
+- traces the entire event handler invocation, stopping at
+  `OrderEventHandler.process` exit
+- `--debug-jdi` logs suspend-count and rendering diagnostics
+
+Known remaining trash:
+
+- some argument rendering can print `error=IncompatibleThreadStateException`
+- some argument values may look stale/wrong under JDI timing
+- the trace is still useful for call shape/order, but argument rendering needs
+  cleanup before calling it polished
 
 ---
 
-## Known issues / deferred
+## Historical bug context: --trace-after-hit hung in JdiAttacher
 
-- **MSYS path mangling** — dry-run shows Windows paths for Linux paths (e.g. `/usr/bin/java` →
-  `C:/Program Files/Git/usr/bin/java`). Only affects dry-run display on Windows, not actual execution.
-  Not worth fixing now.
-- **`resources {}` block** — parsed but not resolved. `${trades}` path is hardcoded in playbook for now.
-  Resource resolution (download to `.shbang-resources/`) is a future sprint.
-- **Nested `for_each`** — not implemented in parser. Depth-first execution deferred.
-- **HOCON jar** — only available at work via Nexus. Use JSON context locally.
-- **`$` local subject** — implemented for `$ run -> capture` but not `$ send` etc.
+**Symptom:** jdi-attacher connects, hits the breakpoint on `ORD-12345`, prints hit info, enables MethodEntry/MethodExit requests, prints `[jdi] tracing ... limit=500`, then hangs forever. No method events fire. The JVM stays suspended at `ORD-12345`.
+
+**Confirmed:** Without `--trace-after-hit`, the breakpoint hit works perfectly — jdi-attacher hits ORD-12345, resumes, JVM replays remaining events, VM terminates.
+
+**Confirmed:** `events.resume()` returns successfully (via debug prints) but the JVM doesn't run.
+
+**Environment:**
+- jdi-attacher runs on JDK 25.0.3 (host Windows)
+- bluebird-stub JVM is JDK 17.0.19 (Docker container, trading-host1 port 5005)
+- `start` script uses `suspend=y`
+
+**Investigation so far:**
+
+1. Not the `toString()` INVOKE_SINGLE_THREADED call — switching printHit to FIELDS mode (no method invocation) made no difference.
+
+2. Not the class filter — same hang with no `--trace-filter`.
+
+3. `events.resume()` IS called and returns, `vm.resume()` also makes no difference.
+
+4. Suspend count: not measured yet.
+
+**Next thing to try:** Remove `addThreadFilter(thread)` from the MethodEntry and MethodExit requests in `enableTrace()`. The thread filter on the request is the one remaining difference between the working path (no trace) and the broken path. If removing it makes trace work, the thread filter is the culprit — possibly because the `ThreadReference` captured at breakpoint time becomes invalid after `events.resume()` in JDK 17.
+
+The three `addThreadFilter` calls to remove are in `enableTrace()` (lines ~336, 342, 350):
+```java
+trace.entryRequest.addThreadFilter(thread);   // remove
+trace.exitRequest.addThreadFilter(thread);    // remove
+trace.rootExitRequest.addThreadFilter(thread); // remove
+```
+
+After removing, recompile and test:
+```bash
+cd tools/jdi-attacher
+/c/d/i/jdk-25.0.3+9/bin/javac --add-modules jdk.jdi -d . JdiAttacher.java
+/c/d/i/jdk-25.0.3+9/bin/jar cfe jdi-attacher.jar com.bluebird.trading.utils.JdiAttacher com/
+
+# containers are already running
+cd C:/d/projects/sh.bang
+source bin/playground   # re-creates .playground-ssh-config
+bin/playground --debug-replay
+```
+
+Expected output if fix works:
+```
+[jdi] tracing com.bluebird.trading.* limit=500
+
+  → com.bluebird.trading.OrderEventHandler.validate(...)
+  ← com.bluebird.trading.OrderEventHandler.validate = true
+  → com.bluebird.trading.OrderEventHandler.buildState(...)
+  ...
+[jdi] trace complete N events
+```
+
+**Current JdiAttacher.java state:** Has a `printHit` FIELDS-override when `traceAfterHit=true` (harmless, keep it — avoids INVOKE_SINGLE_THREADED in the hit locals printout). No debug prints remain.
 
 ---
 
-## Key design decisions (don't forget)
+## Test commands
 
-- `@` = one-shot SSH under the hood (not interactive session) — engine builds `ssh -J` chains
-- `#` and `$` reserved for future use (one-shot explicit, local)
-- `:path` = implicit `cd` — engine handles it, playbook author never writes `cd`
-- `resources {}` block resolved as preflight before any `for_each`
-- `$ run cmd -> varName` captures local stdout into `SHBANG_RT[varName]`
-- HOCON alias trick: `shard = ${trading.instances}` makes both prod/SIT formats work with same selector
-- Nested `for_each` walks network path — each level is an SSH hop from previous context
-- Depth-first execution order = put nested block before pipes you want to run last
-- Hop mechanism (`ssh -J`) is swappable — many corp environments block ProxyJump
-- `conf` not `env` for context resource keyword (PowerShell conflict)
+```bash
+# Unit tests (3 pre-existing failures in multi-block — unrelated to this work)
+bash tests/run-tests
+
+# Docker containers
+docker compose ps        # target1 and target2 should be Up
+source bin/playground    # sets env, writes .playground-ssh-config
+
+# Run trace scenario
+bin/playground --debug-replay
+
+# Run IntelliJ scenario (starts frozen JVM, connect IntelliJ to localhost:5005)
+bin/playground --debug-replay-intellij
+```

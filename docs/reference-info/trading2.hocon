@@ -1,4 +1,3 @@
-
 install {
   directory = /local/1/trading
   user = sysprod

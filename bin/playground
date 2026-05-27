@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
-# Start target1/target2 SSH servers and configure the local environment so
-# you can run sh.bang and ssh directly from your host shell.
+# Playground entry point.
 #
 # Usage:
-#   source bin/playground          # sets env vars in your shell
+#   source bin/playground          # start containers, install fixtures, set env vars
 #   bin/playground --stop          # tear down containers
 #   bin/playground --status        # show container state
-set -euo pipefail
+#   bin/playground --debug-replay [shard] [class] [method] [condition]
+#   bin/playground --debug-replay-intellij [shard] [class] [method] [condition]
+
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] || set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SSH_CONFIG="$REPO/.playground-ssh-config"
-SSH_KEY="$REPO/tests/e2e/e2e_test_key"
+
+# Ensure java is on PATH for debug commands
+if [[ -z ${JAVA_HOME:-} ]]; then
+  for _jh in "/c/d/i/jdk-25.0.3+9" "/usr/lib/jvm/java-17" "/usr/lib/jvm/java-17-openjdk"; do
+    [[ -x "${_jh}/bin/java" ]] && { export JAVA_HOME="$_jh"; break; }
+  done
+  unset _jh
+fi
+[[ -n ${JAVA_HOME:-} && $PATH != *"${JAVA_HOME}/bin"* ]] && export PATH="${JAVA_HOME}/bin:${PATH}"
 
 _stop() {
   echo "[playground] stopping containers..."
   docker compose -f "$REPO/docker-compose.yml" stop target1 target2
   docker compose -f "$REPO/docker-compose.yml" rm -f target1 target2
-  rm -f "$SSH_CONFIG"
+  rm -f "$REPO/.playground-ssh-config"
   echo "[playground] done."
 }
 
@@ -24,97 +33,23 @@ _status() {
   docker compose -f "$REPO/docker-compose.yml" ps target1 target2
 }
 
-_wait_for_ssh() {
-  local host=$1 port=$2
-  local i=0
-  printf "[playground] waiting for %s..." "$host"
-  while ! ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
-              -o ConnectTimeout=2 -i "$SSH_KEY" \
-              -p "$port" deploy@localhost true 2>/dev/null; do
-    sleep 1
-    i=$(( i + 1 ))
-    if (( i > 30 )); then
-      echo " timeout"
-      return 1
-    fi
-    printf '.'
-  done
-  echo " ready"
-}
+declare -A _CMDS=(
+  [--stop]=_stop
+  [--status]=_status
+)
 
-case "${1:-}" in
-  --stop)   _stop;   exit 0 ;;
-  --status) _status; exit 0 ;;
-esac
+arg=${1:-}
 
-echo "[playground] building and starting target1, target2..."
-docker compose -f "$REPO/docker-compose.yml" up -d --build target1 target2
+fn=${_CMDS[$arg]:-}
+if [[ -n $fn ]]; then
+  "$fn"
+  exit 0
+fi
 
-_wait_for_ssh trading-host1 2221
-_wait_for_ssh trading-host2 2222
+if [[ $arg == --debug-replay || $arg == --debug-replay-intellij ]]; then
+  shift
+  exec "$REPO/bin/playground-debug" "${arg#--}" "$@"
+fi
 
-# Write SSH config first so setup can use it
-cat > "$SSH_CONFIG" <<EOF
-Host trading-host1
-  HostName localhost
-  Port 2221
-  User deploy
-  IdentityFile $SSH_KEY
-  StrictHostKeyChecking no
-  BatchMode yes
-  KexAlgorithms ecdh-sha2-nistp256
-
-Host trading-host2
-  HostName localhost
-  Port 2222
-  User deploy
-  IdentityFile $SSH_KEY
-  StrictHostKeyChecking no
-  BatchMode yes
-  KexAlgorithms ecdh-sha2-nistp256
-EOF
-
-SSH_OPTS="-F $SSH_CONFIG -o KexAlgorithms=ecdh-sha2-nistp256"
-
-echo "[playground] setting up fixture data on targets..."
-FIXTURE_DIR="$REPO/tests/e2e/fixtures"
-INSTALL_BASE="/opt/trading"
-DATE_TAG="20250522"
-
-for shard in shard_1 shard_2; do
-  echo "[playground]   $shard → trading-host1"
-  ssh $SSH_OPTS trading-host1 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
-  local_tar=$(mktemp --suffix=.tar.gz)
-  tar czf "$local_tar" -C "$FIXTURE_DIR/$shard" log.rdat.out
-  scp $SSH_OPTS "$local_tar" "trading-host1:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
-  rm -f "$local_tar"
-done
-
-for shard in shard_3 shard_4; do
-  echo "[playground]   $shard → trading-host2"
-  ssh $SSH_OPTS trading-host2 "mkdir -p $INSTALL_BASE/$shard/data $INSTALL_BASE/$shard/app $INSTALL_BASE/$shard/log"
-  local_tar=$(mktemp --suffix=.tar.gz)
-  tar czf "$local_tar" -C "$FIXTURE_DIR/$shard" log.rdat.out
-  scp $SSH_OPTS "$local_tar" "trading-host2:$INSTALL_BASE/$shard/data/${DATE_TAG}_rdat.tar.gz"
-  rm -f "$local_tar"
-done
-
-echo "[playground] copying replay-stub.jar to targets..."
-scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" trading-host1:/tmp/replay-stub.jar
-scp $SSH_OPTS "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tmp/replay-stub.jar
-
-export SHBANG_SSH_KEY="$SSH_KEY"
-export SHBANG_SSH_CONFIG="$SSH_CONFIG"
-
-echo
-echo "[playground] ready. env vars set:"
-echo "  SHBANG_SSH_KEY=$SHBANG_SSH_KEY"
-echo "  SHBANG_SSH_CONFIG=$SHBANG_SSH_CONFIG"
-echo
-echo "  ssh -F $SSH_CONFIG trading-host1"
-echo "  ssh -F $SSH_CONFIG trading-host2"
-echo
-echo "  bin/sh.bang run examples/replay/replay.shbang --ctx examples/replay/environment.json"
-echo
-echo "[playground] tip: 'source bin/playground' to set env vars in your current shell"
-echo "             'bin/playground --stop' to tear down"
+# Default: full setup (sourceable)
+source "$REPO/bin/playground-setup"

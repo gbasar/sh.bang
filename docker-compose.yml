@@ -18,6 +18,8 @@ services:
     hostname: trading-host1
     ports:
       - "2221:22"
+      - "5005:5005"   # shard_1 JDWP
+      - "5006:5006"   # shard_2 JDWP
 
   target2:
     build:
@@ -26,6 +28,8 @@ services:
     hostname: trading-host2
     ports:
       - "2222:22"
+      - "5007:5005"   # shard_3 JDWP (mapped to 5007 to avoid conflict)
+      - "5008:5006"   # shard_4 JDWP (mapped to 5008 to avoid conflict)
 
   # ---------- e2e runner ----------
 
