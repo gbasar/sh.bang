@@ -4,4 +4,7 @@
 *.tmp
 *.swp
 *~
+*.jar
+*.class
+**/com/
 .playground-ssh-config
