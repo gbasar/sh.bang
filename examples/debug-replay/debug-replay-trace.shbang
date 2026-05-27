@@ -1,0 +1,52 @@
+#! Create standard directory layout on jumphost
+
+// Reconstruct a hermetic shard environment on the jumphost for debugging.
+// Uses event sourcing: pull the same binary + config + rdat archive from prod,
+// unpack to the standard Bluebird layout, patch for debug mode, and start.
+//
+// Context keys required (see developerScratchPad.hocon + environment.conf):
+//   trading.shard[*].host              -- prod host to pull from
+//   trading.shard[*].install.directory -- prod install root
+//   trading.shard[*].shard             -- shard name (e.g. shard_1)
+//   staging.root                       -- local staging root on jumphost
+//   staging.jumphost                   -- jumphost hostname
+//   archive.date                       -- date tag e.g. 20260520
+//   debug.shard                        -- shard key to target (e.g. 1 â†’ trading.shard[1])
+//   debug.class                        -- class to break on (fully qualified, e.g. com.bluebird.trading.OrderEventHandler)
+//   debug.method                       -- method to break on (e.g. process)
+//   debug.condition                    -- local var condition (e.g. orderId=ORD-12345)
+//   debug.traceFilter                  -- class filter for --trace-after-hit (e.g. com.bluebird.trading.*)
+//   debug.traceLimit                   -- max trace events (default 1000)
+//   debug.render                       -- value render mode: id | string | fields (default string)
+//   debug.fieldDepth                   -- object recursion depth for fields mode (default 2)
+//   debug.fieldMax                     -- max fields per object for fields mode (default 20)
+//   debug.maxStringLen                 -- truncate strings longer than this (default 200)
+
+resources {
+  jdiAttacher = file://tools/jdi-attacher/jdi-attacher.jar
+}
+
+#! Create std Bluebird layout
+for_each ${trading.shard[${debug.shard}]}
+| @${staging.jumphost}:${staging.root} run mkdir -p ${shard}/trading/app/trading/{bin,lib} ${shard}/trading/config ${shard}/trading/data/trading/{archive,txn-log} ${shard}/trading/log/trading/archive
+
+#! Pull binaries and config from prod shard
+for_each ${trading.shard[${debug.shard}]}
+| @${host}:${install.directory}/${shard}/trading/app/trading/lib fetch ${staging.root}/${shard}/trading/app/trading/lib/
+| @${host}:${install.directory}/${shard}/trading/app/trading/bin fetch ${staging.root}/${shard}/trading/app/trading/bin/
+| @${host}:${install.directory}/${shard}/trading/config/environment.conf fetch ${staging.root}/${shard}/trading/config/
+
+#! Pull rdat archive from prod and unpack to txn-log
+for_each ${trading.shard[${debug.shard}]}
+| @${host}:${install.directory}/${shard}/trading/data/trading/archive fetch ${staging.root}/${shard}/trading/data/trading/archive/
+| @${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
+
+// JVM starts frozen (suspend=y). jdi-attacher connects, arms a conditional
+// breakpoint, then resumes the JVM. On the first hit it enables method
+// entry/exit tracing for debug.traceFilter classes and prints the full call
+// tree with arguments and return values into -> debugTrace.
+
+#! Start app and trace call tree at condition hit
+for_each ${trading.shard[${debug.shard}]}
+| @${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run pkill -f bluebird-stub.jar 2>/dev/null; sleep 1; setsid nohup ./start > /tmp/${shard}-jdwp.log 2>&1 </dev/null &
+| @local run java --add-modules jdk.jdi -jar ${jdiAttacher} ${staging.jumphost} --class ${debug.class} --method ${debug.method} --condition ${debug.condition} --trace-after-hit --trace-filter ${debug.traceFilter} --trace-limit ${debug.traceLimit} --render ${debug.render} --field-depth ${debug.fieldDepth} --field-max ${debug.fieldMax} --max-string-len ${debug.maxStringLen} -> debugTrace

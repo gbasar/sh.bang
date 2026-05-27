@@ -44,15 +44,25 @@ RUN cd /app/tools/replay-stub && \
 
 # Build bluebird-stub.jar
 RUN cd /app/tools/bluebird-stub && \
-    javac --release 17 -encoding UTF-8 -g BluebirdStub.java OrderEventHandler.java TradeEventHandler.java StaticDataHandler.java && \
-    jar cfe bluebird-stub.jar BluebirdStub BluebirdStub.class OrderEventHandler.class TradeEventHandler.class StaticDataHandler.class && \
-    rm -f BluebirdStub.class OrderEventHandler.class TradeEventHandler.class StaticDataHandler.class
+    mkdir -p com/bluebird/trading && \
+    cp BluebirdStub.java OrderEventHandler.java OrderEventMessage.java TradeEventHandler.java StaticDataHandler.java com/bluebird/trading/ && \
+    javac --release 17 -encoding UTF-8 -g com/bluebird/trading/*.java && \
+    jar cfe bluebird-stub.jar com.bluebird.trading.BluebirdStub \
+        com/bluebird/trading/BluebirdStub.class \
+        com/bluebird/trading/OrderEventHandler.class \
+        com/bluebird/trading/OrderEventMessage.class \
+        com/bluebird/trading/TradeEventHandler.class \
+        com/bluebird/trading/StaticDataHandler.class && \
+    rm -rf com/
 
 # Build jdi-attacher.jar (requires jdk.jdi module — JDK only, not JRE)
 RUN cd /app/tools/jdi-attacher && \
-    javac --release 17 -encoding UTF-8 --add-modules jdk.jdi JdiAttacher.java && \
-    jar cfe jdi-attacher.jar JdiAttacher JdiAttacher.class && \
-    rm -f JdiAttacher.class
+    mkdir -p com/bluebird/trading/utils && \
+    cp JdiAttacher.java com/bluebird/trading/utils/ && \
+    javac --release 17 -encoding UTF-8 --add-modules jdk.jdi com/bluebird/trading/utils/JdiAttacher.java && \
+    jar cfe jdi-attacher.jar com.bluebird.trading.utils.JdiAttacher \
+        com/bluebird/trading/utils/*.class && \
+    rm -rf com/
 
 # Bake e2e test private key
 RUN mkdir -p /root/.ssh && \

@@ -1,3 +1,5 @@
+package com.bluebird.trading;
+
 import java.io.*;
 import java.nio.file.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -45,7 +47,7 @@ public class BluebirdStub {
 
         recover(txnLogDir, staticHandler, orderHandler, tradeHandler);
 
-        ready();
+        System.out.println("[bluebird-stub] done");
     }
 
     // -------------------------------------------------------------------------
@@ -98,7 +100,8 @@ public class BluebirdStub {
                         tradeHandler.process(id, payload);
                         trades++;
                     } else {
-                        orderHandler.process(id, payload);
+                        OrderEventMessage msg = OrderEventMessage.parse(id, payload);
+                        orderHandler.process(id, msg);
                         orders++;
                     }
                 }

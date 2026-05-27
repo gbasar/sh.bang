@@ -1,3 +1,5 @@
+package com.bluebird.trading;
+
 /**
  * StaticDataHandler — processes static data messages during startup.
  *

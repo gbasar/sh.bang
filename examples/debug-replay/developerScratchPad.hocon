@@ -11,8 +11,14 @@ archive {
 }
 
 debug {
-  shard     = 1                    # which shard to target (matches trading.shard key)
-  class     = OrderEventHandler
-  method    = process
-  condition = "orderId=ORD-12345"
+  shard        = 1                        # which shard to target (matches trading.shard key)
+  class        = "com.bluebird.trading.OrderEventHandler"
+  method       = process
+  condition    = "orderId=ORD-12345"
+  traceFilter  = "com.bluebird.trading.*" # filter to trading package (empty = trace all classes)
+  traceLimit   = 500                      # max method events to capture before stopping
+  render       = "fields"                 # id | string | fields
+  fieldDepth   = 2                        # how deep to recurse into objects
+  fieldMax     = 20                       # max fields per object
+  maxStringLen = 200                      # truncate long strings
 }

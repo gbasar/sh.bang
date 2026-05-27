@@ -118,8 +118,11 @@ dispatch_local() {
   local cmd=${dl_event[cmd]}
   local capture=${dl_event[capture]}
   if [[ -n $capture ]]; then
-    local result
-    result=$(bash -c "$cmd" 2>&1)
+    local tmp result
+    tmp=$(mktemp)
+    bash -c "$cmd" 2>&1 | tee "$tmp" | sed 's/^/â”‚  /'
+    result=$(cat "$tmp")
+    rm -f "$tmp"
     SHBANG_RT[$capture]=$result
     log_debug "local: captured ${capture}=${result}"
   else

@@ -1,12 +1,11 @@
+package com.bluebird.trading;
+
 /**
  * OrderEventHandler — processes inbound order events during recovery and live trading.
  *
  * This is the class a developer would set a JDI breakpoint on when investigating
  * order processing bugs. The process() method is called for every event in the
  * transaction log during recovery, and for every live inbound message thereafter.
- *
- * To break on a specific order:
- *   SetBreakpoint --class OrderEventHandler --method process --condition "orderId.equals(\"ORD-12345\")"
  */
 public class OrderEventHandler {
 
@@ -14,19 +13,38 @@ public class OrderEventHandler {
 
     /**
      * Process a single order event.
-     * This is the primary breakpoint target for debugging order issues.
+     * Primary breakpoint target — orderId is kept as an explicit first param so
+     * jdi-attacher --condition orderId=ORD-12345 matches a local variable directly.
      *
      * @param orderId  the order identifier (e.g. "ORD-12345")
-     * @param payload  the raw event payload from the transaction log
+     * @param msg      the fully parsed order event
      */
-    public void process(String orderId, String payload) {
+    public void process(String orderId, OrderEventMessage msg) {
         processedCount++;
-        // In the real app this is where order state is built/updated.
-        // Developers set breakpoints here with orderId conditions to
-        // isolate specific orders without stepping through thousands of others.
+        if (!validate(msg)) return;
+        buildState(msg);
     }
 
-    public int getProcessedCount() {
-        return processedCount;
+    private boolean validate(OrderEventMessage msg) {
+        if (msg.orderId == null || msg.orderId.isEmpty()) return false;
+        if (!"BUY".equals(msg.side) && !"SELL".equals(msg.side)) return false;
+        if (msg.qty <= 0)   return false;
+        if (msg.price <= 0) return false;
+        return true;
     }
+
+    private void buildState(OrderEventMessage msg) {
+        double notional = computeNotional(msg.qty, msg.price);
+        checkRisk(msg.orderId, notional);
+    }
+
+    private double computeNotional(int qty, double price) {
+        return qty * price;
+    }
+
+    private void checkRisk(String orderId, double notional) {
+        // placeholder: real app checks position limits here
+    }
+
+    public int getProcessedCount() { return processedCount; }
 }

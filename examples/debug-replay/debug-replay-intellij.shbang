@@ -1,0 +1,46 @@
+#! Create standard directory layout on jumphost
+
+// Reconstructs a hermetic shard environment on the jumphost for interactive
+// debugging. JVM starts frozen (suspend=y) — connect IntelliJ before replay runs.
+//
+// Context keys required (see developerScratchPad.hocon + environment.conf):
+//   trading.shard[*].host              -- prod host to pull from
+//   trading.shard[*].install.directory -- prod install root
+//   trading.shard[*].shard             -- shard name (e.g. shard_1)
+//   staging.root                       -- local staging root on jumphost
+//   staging.jumphost                   -- jumphost hostname
+//   archive.date                       -- date tag e.g. 20260520
+//   debug.shard                        -- shard key to target (e.g. 1 → trading.shard[1])
+//   debug.class                        -- class to break on (fully qualified, e.g. com.bluebird.trading.OrderEventHandler)
+//   debug.method                       -- method to break on (e.g. process)
+//   debug.condition                    -- condition hint for IntelliJ (e.g. orderId=ORD-12345)
+
+#! Create std Bluebird layout
+for_each ${trading.shard[${debug.shard}]}
+| @${staging.jumphost}:${staging.root} run mkdir -p ${shard}/trading/app/trading/{bin,lib} ${shard}/trading/config ${shard}/trading/data/trading/{archive,txn-log} ${shard}/trading/log/trading/archive
+
+#! Pull binaries and config from prod shard
+for_each ${trading.shard[${debug.shard}]}
+| @${host}:${install.directory}/${shard}/trading/app/trading/lib fetch ${staging.root}/${shard}/trading/app/trading/lib/
+| @${host}:${install.directory}/${shard}/trading/app/trading/bin fetch ${staging.root}/${shard}/trading/app/trading/bin/
+| @${host}:${install.directory}/${shard}/trading/config/environment.conf fetch ${staging.root}/${shard}/trading/config/
+
+#! Pull rdat archive from prod and unpack to txn-log
+for_each ${trading.shard[${debug.shard}]}
+| @${host}:${install.directory}/${shard}/trading/data/trading/archive fetch ${staging.root}/${shard}/trading/data/trading/archive/
+| @${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
+
+// JVM starts frozen (suspend=y) — JDWP port open, no code runs until a
+// debugger connects.
+//
+// Connect IntelliJ:  Run > Edit Configurations > + > Remote JVM Debug
+//   Host: ${staging.jumphost}   Port: 5005
+// Set conditional breakpoint:
+//   Class:     ${debug.class}
+//   Method:    ${debug.method}
+//   Condition: orderId.equals("${debug.condition}")
+// Press Resume — JVM loads static data then replays rdat.in.
+
+#! Start app and wait for IntelliJ (suspend=y — JVM frozen until debugger connects)
+for_each ${trading.shard[${debug.shard}]}
+| @${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run pkill -f bluebird-stub.jar 2>/dev/null; sleep 1; setsid nohup ./start > /tmp/${shard}-jdwp.log 2>&1 </dev/null &

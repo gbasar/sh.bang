@@ -3,8 +3,6 @@
 // Reconstruct a hermetic shard environment on the jumphost for debugging.
 // Uses event sourcing: pull the same binary + config + rdat archive from prod,
 // unpack to the standard Bluebird layout, patch for debug mode, and start.
-// The app sees the rdat.in on startup, silently replays to rebuild state,
-// then suspends waiting for a debugger to attach (JDWP on port 5005).
 //
 // Context keys required (see environment.conf):
 //   trading.shard[*].host              -- prod host to pull from
@@ -13,10 +11,16 @@
 //   staging.root                       -- local staging root on jumphost
 //   staging.jumphost                   -- jumphost hostname
 //   archive.date                       -- date tag e.g. 20260520
-//   debug.shard                        -- shard key to target (e.g. 1 → trading.shard[1])
+//   debug.shard                        -- shard key to target (e.g. 1 â†’ trading.shard[1])
 //   debug.class                        -- class to break on (e.g. OrderEventHandler)
 //   debug.method                       -- method to break on (e.g. process)
 //   debug.condition                    -- local var condition (e.g. orderId=ORD-12345)
+//   debug.traceFilter                  -- class filter for --trace-after-hit (e.g. com.company.trading.*)
+//   debug.traceLimit                   -- max trace events (default 1000)
+//   debug.render                       -- value render mode: id | string | fields (default string)
+//   debug.fieldDepth                   -- object recursion depth for fields mode (default 2)
+//   debug.fieldMax                     -- max fields per object for fields mode (default 20)
+//   debug.maxStringLen                 -- truncate strings longer than this (default 200)
 
 resources {
   jdiAttacher = file://tools/jdi-attacher/jdi-attacher.jar
@@ -37,15 +41,43 @@ for_each ${trading.shard[${debug.shard}]}
 | @${host}:${install.directory}/${shard}/trading/data/trading/archive fetch ${staging.root}/${shard}/trading/data/trading/archive/
 | @${staging.jumphost}:${staging.root}/${shard}/trading/data/trading/archive run tar xvf trading-data-${archive.date}*.tar.gz -C ../txn-log/
 
-#! Start app and arm breakpoint
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Option 1 â€” jdi-attacher trace  (use start: suspend=y)
+//
+//   JVM starts frozen (suspend=y). jdi-attacher connects, arms a conditional
+//   breakpoint, then resumes the JVM. On the first hit it enables method
+//   entry/exit tracing for debug.traceFilter classes.
+//   The full call tree â€” with arguments (toString()) and return values â€” is
+//   printed to stdout and captured in the -> debugTrace variable.
+//
+//   Use this when you need to understand what happened inside a specific call
+//   without stepping interactively. The trace is deterministic and repeatable.
+//
+//   After reviewing the trace, if you need to step through a specific method,
+//   run Option 2 and set a breakpoint at that narrower point in IntelliJ.
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// Starts the target shard with JDWP open (suspend=y), then runs jdi-attacher with --hand-off.
-// jdi-attacher arms the conditional breakpoint, calls vm.resume(), waits for rdat.in replay
-// to hit the condition, prints locals, and detaches — leaving the JVM suspended.
-// Connect IntelliJ to staging.jumphost:debug.jdwpPort to walk in at the exact line.
-// debug.shard in developerScratchPad.hocon selects which shard to target.
-
+#! Start app and trace call tree at condition hit
 for_each ${trading.shard[${debug.shard}]}
 | @${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run pkill -f bluebird-stub.jar 2>/dev/null; sleep 1; setsid nohup ./start > /tmp/${shard}-jdwp.log 2>&1 </dev/null &
-| @local run sleep 3
-| @local run java --add-modules jdk.jdi -jar ${jdiAttacher} ${staging.jumphost} --class ${debug.class} --method ${debug.method} --condition ${debug.condition} --hand-off
+| @local run java --add-modules jdk.jdi -jar ${jdiAttacher} ${staging.jumphost} --class ${debug.class} --method ${debug.method} --condition ${debug.condition} --trace-after-hit --trace-filter ${debug.traceFilter} --trace-limit ${debug.traceLimit} --render ${debug.render} --field-depth ${debug.fieldDepth} --field-max ${debug.fieldMax} --max-string-len ${debug.maxStringLen} -> debugTrace
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Option 2 â€” IntelliJ interactive  (use start: suspend=y)
+//
+//   JVM starts frozen â€” JDWP port open, no code runs until a debugger connects.
+//   Connect IntelliJ to ${staging.jumphost}:5005, set a conditional breakpoint:
+//     Class:     ${debug.class}
+//     Method:    ${debug.method}
+//     Condition: orderId.equals("${debug.condition}")   (adjust field name as needed)
+//   Press Resume. The JVM will load static data, then replay rdat.in.
+//   IntelliJ catches the hit during the recovery pass and you can step through.
+//
+//   IntelliJ run config: Run > Edit Configurations > + > Remote JVM Debug
+//     Debugger mode: Attach to remote JVM
+//     Host: ${staging.jumphost}   Port: 5005
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+#! Start app and wait for IntelliJ (suspend=y â€” JVM frozen until debugger connects)
+for_each ${trading.shard[${debug.shard}]}
+| @${staging.jumphost}:${staging.root}/${shard}/trading/app/trading/bin run pkill -f bluebird-stub.jar 2>/dev/null; sleep 1; setsid nohup ./start > /tmp/${shard}-jdwp.log 2>&1 </dev/null &

@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title desc">
+  <title id="title">sh.bang masked mascot logo</title>
+  <desc id="desc">Dark hooded terminal mascot with yellow ASCII face and a sh.bang censor bar over the mouth.</desc>
+
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="36%" r="72%">
+      <stop offset="0%" stop-color="#181818"/>
+      <stop offset="62%" stop-color="#080808"/>
+      <stop offset="100%" stop-color="#020202"/>
+    </radialGradient>
+
+    <linearGradient id="hood" x1="50%" y1="2%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="46%" stop-color="#151515"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </linearGradient>
+
+    <linearGradient id="cloth" x1="50%" y1="42%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#161616"/>
+      <stop offset="100%" stop-color="#070707"/>
+    </linearGradient>
+
+    <filter id="yellowGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.75"/>
+    </filter>
+  </defs>
+
+  <!-- terminal-dark background -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- shoulders / hoodie body, dark-on-dark -->
+  <path d="M72 512
+           C88 405 136 340 198 318
+           C232 306 280 306 314 318
+           C376 340 424 405 440 512 Z"
+        fill="url(#cloth)"/>
+
+  <!-- zipper hint -->
+  <path d="M256 330 L256 512" stroke="#2d2d2d" stroke-width="5" opacity="0.7"/>
+  <path d="M256 334 L256 512" stroke="#050505" stroke-width="1.5" opacity="0.8"/>
+
+  <!-- hood outer shell -->
+  <path d="M113 327
+           C100 224 119 129 181 72
+           C218 38 256 24 256 24
+           C256 24 294 38 331 72
+           C393 129 412 224 399 327
+           C374 283 340 253 305 238
+           C286 230 269 226 256 226
+           C243 226 226 230 207 238
+           C172 253 138 283 113 327 Z"
+        fill="url(#hood)" filter="url(#softShadow)"/>
+
+  <!-- hood rim -->
+  <path d="M141 318
+           C130 226 148 151 195 108
+           C225 81 256 70 256 70
+           C256 70 287 81 317 108
+           C364 151 382 226 371 318
+           C350 273 320 239 288 222
+           C274 215 262 212 256 212
+           C250 212 238 215 224 222
+           C192 239 162 273 141 318 Z"
+        fill="#050505" stroke="#303030" stroke-width="8" stroke-linejoin="round"/>
+
+  <!-- face void -->
+  <ellipse cx="256" cy="220" rx="112" ry="139" fill="#020202"/>
+
+  <!-- ASCII face in logo yellow -->
+  <g filter="url(#yellowGlow)"
+     font-family="'Courier New', Courier, monospace"
+     font-weight="900"
+     fill="#FFD700"
+     text-anchor="middle">
+    <text x="205" y="171" font-size="34">^</text>
+    <text x="307" y="171" font-size="34">^</text>
+    <text x="205" y="210" font-size="30">@</text>
+    <text x="307" y="210" font-size="30">@</text>
+    <text x="256" y="247" font-size="28">/</text>
+    <text x="256" y="276" font-size="28">_</text>
+  </g>
+
+  <!-- censor tape over mouth -->
+  <g transform="rotate(-2 256 317)">
+    <rect x="139" y="285" width="234" height="62" rx="8"
+          fill="#FFD700" stroke="#0a0a0a" stroke-width="6"/>
+    <path d="M151 297 H361 M151 335 H361"
+          stroke="#c79d00" stroke-width="2" opacity="0.5"/>
+    <text x="256" y="326"
+          text-anchor="middle" dominant-baseline="middle"
+          font-family="'Courier New', Courier, monospace"
+          font-weight="900" font-size="42"
+          fill="#050505">sh.bang</text>
+  </g>
+
+  <!-- drawstrings, nearly black -->
+  <path d="M198 316 C190 363 190 409 198 456" fill="none" stroke="#242424" stroke-width="5" stroke-linecap="round"/>
+  <path d="M314 316 C322 363 322 409 314 456" fill="none" stroke="#242424" stroke-width="5" stroke-linecap="round"/>
+  <rect x="191" y="451" width="14" height="34" rx="4" fill="#121212" stroke="#333" stroke-width="2"/>
+  <rect x="307" y="451" width="14" height="34" rx="4" fill="#121212" stroke="#333" stroke-width="2"/>
+
+  <!-- tiny prompt mark -->
+  <text x="256" y="489"
+        text-anchor="middle"
+        font-family="'Courier New', Courier, monospace"
+        font-size="18" fill="#2f2f2f">$ bash: line 1: why</text>
+</svg>

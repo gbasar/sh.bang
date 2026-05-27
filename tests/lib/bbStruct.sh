@@ -125,9 +125,16 @@ SCRIPT
 # ---------------------------------------------------------------------------
 # bb_create_debug_binaries <host> <install_dir> <shard> <jar_path> <jdwp_port> [ssh_key]
 #
-# Like bb_create_binaries but start injects JDWP (suspend=n) and runs the
-# given jar.  The app starts normally and the debugger can attach at any time.
-# Use with bluebird-stub.jar for the debug-replay scenario.
+# Creates two start scripts for the debug-replay scenario:
+#
+#   start        — suspend=y: JVM freezes on launch waiting for a debugger.
+#                  Connect IntelliJ immediately; it will catch rdat.in replay
+#                  from the beginning. Use when you need to step through code.
+#
+#   start-trace  — suspend=n: JVM runs immediately; attach jdi-attacher with
+#                  --trace-after-hit to capture the call tree at a condition.
+#                  Use when you need to understand what happened without
+#                  stepping interactively.
 # ---------------------------------------------------------------------------
 bb_create_debug_binaries() {
   local host=$1 install_dir=$2 shard=$3 jar_path=$4 jdwp_port=$5 key="${6:-}"
@@ -137,15 +144,23 @@ bb_create_debug_binaries() {
 
   echo "[bbStruct] create debug binaries: deploy@${host}:${bin}  jdwp=*:${jdwp_port}"
 
-  # upload the jar into lib/
   _bb_scp "$jar_path" "deploy@${host}:${lib}/bluebird-stub.jar" "$key"
 
   _bb_ssh "$host" "$key" "
     cat > ${bin}/start <<SCRIPT
 #!/usr/bin/env bash
-echo \"[start] ${shard} waiting for debugger on port ${jdwp_port} (suspend=y)...\"
+echo \"[start] ${shard} JDWP open on *:${jdwp_port} (suspend=y) — connect IntelliJ then replay will run\"
 exec java \\
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:${jdwp_port} \\
+  -jar ${lib}/bluebird-stub.jar \\
+  ${txn_log}
+SCRIPT
+
+    cat > ${bin}/start-trace <<SCRIPT
+#!/usr/bin/env bash
+echo \"[start] ${shard} JDWP open on *:${jdwp_port} (suspend=n) — attach jdi-attacher to trace\"
+exec java \\
+  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${jdwp_port} \\
   -jar ${lib}/bluebird-stub.jar \\
   ${txn_log}
 SCRIPT
@@ -163,7 +178,7 @@ sleep 1
 \$(dirname \$0)/start
 SCRIPT
 
-    chmod +x ${bin}/start ${bin}/stop ${bin}/restart
+    chmod +x ${bin}/start ${bin}/start-trace ${bin}/stop ${bin}/restart
   "
 }
 

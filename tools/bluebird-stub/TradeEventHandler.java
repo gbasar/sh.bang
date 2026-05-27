@@ -1,3 +1,5 @@
+package com.bluebird.trading;
+
 /**
  * TradeEventHandler — processes trade execution events during recovery and live trading.
  *
