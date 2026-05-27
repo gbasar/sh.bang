@@ -31,7 +31,6 @@ emit() {
   done
 }
 
-# what the fuck is shift again?
 emit_kv() {
   local type=$1
   shift
@@ -87,12 +86,8 @@ console_cmd_local() {
 
 console_cmd_scp() {
   local -n event=$1
-  local arrow
-  case ${event[verb]} in
-    send)  arrow='↑' ;;
-    fetch) arrow='↓' ;;
-    *)     arrow='·' ;;
-  esac
+  local -A _verb_arrow=([send]='↑' [fetch]='↓')
+  local arrow=${_verb_arrow[${event[verb]}]}
   fmt_scp "$arrow" "${event[host]}" "${event[path]}" "${event[args]}"
 }
 

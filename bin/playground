@@ -1,25 +1,31 @@
 #!/usr/bin/env bash
-# Start target1/target2 SSH servers and configure the local environment so
-# you can run sh.bang and ssh directly from your host shell.
+# Playground entry point.
 #
 # Usage:
-#   source bin/playground          # sets env vars in your shell
+#   source bin/playground          # start containers, install fixtures, set env vars
 #   bin/playground --stop          # tear down containers
 #   bin/playground --status        # show container state
+#   bin/playground --debug-replay [shard] [class] [method] [condition]
+#   bin/playground --debug-replay-intellij [shard] [class] [method] [condition]
 
-# Only apply strict mode when executed as a script, not when sourced.
-# Sourcing with set -e would kill the user's terminal on any error.
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] || set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SSH_CONFIG="$REPO/.playground-ssh-config"
-SSH_KEY="$REPO/tests/e2e/e2e_test_key"
+
+# Ensure java is on PATH for debug commands
+if [[ -z ${JAVA_HOME:-} ]]; then
+  for _jh in "/c/d/i/jdk-25.0.3+9" "/usr/lib/jvm/java-17" "/usr/lib/jvm/java-17-openjdk"; do
+    [[ -x "${_jh}/bin/java" ]] && { export JAVA_HOME="$_jh"; break; }
+  done
+  unset _jh
+fi
+[[ -n ${JAVA_HOME:-} && $PATH != *"${JAVA_HOME}/bin"* ]] && export PATH="${JAVA_HOME}/bin:${PATH}"
 
 _stop() {
   echo "[playground] stopping containers..."
   docker compose -f "$REPO/docker-compose.yml" stop target1 target2
   docker compose -f "$REPO/docker-compose.yml" rm -f target1 target2
-  rm -f "$SSH_CONFIG"
+  rm -f "$REPO/.playground-ssh-config"
   echo "[playground] done."
 }
 
@@ -27,240 +33,23 @@ _status() {
   docker compose -f "$REPO/docker-compose.yml" ps target1 target2
 }
 
-_wait_for_ssh() {
-  local host=$1 port=$2
-  local i=0
-  printf "[playground] waiting for %s..." "$host"
-  while ! ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
-              -o ConnectTimeout=2 -i "$SSH_KEY" \
-              -p "$port" deploy@localhost true 2>/dev/null; do
-    sleep 1
-    i=$(( i + 1 ))
-    if (( i > 30 )); then
-      echo " timeout"
-      return 1
-    fi
-    printf '.'
-  done
-  echo " ready"
-}
+declare -A _CMDS=(
+  [--stop]=_stop
+  [--status]=_status
+)
 
-_reset_debug_fixtures() {
-  local shard=$1 host_idx=$2 port=$3
-  local host="trading-host${host_idx}"
-  local pidfile="/tmp/bluebird-${shard}.pid"
-  echo "[playground] tearing down $shard on $host..."
-  ssh -F "$SSH_CONFIG" "$host" \
-    "[ -f ${pidfile} ] && kill -9 \$(cat ${pidfile}) 2>/dev/null; sleep 1; rm -f ${pidfile}; rm -rf /opt/trading/${shard}; true"
-  echo "[playground] installing fresh debug fixtures (jdwp=$port)..."
-  export E2E_SSH_KEY="$SSH_KEY"
-  export E2E_SSH_CONFIG="$SSH_CONFIG"
-  source "$REPO/tests/lib/bbStruct.sh"
-  local BLACKBIRD_JAR="$REPO/tools/bluebird-stub/bluebird-stub.jar"
-  [[ -f $BLACKBIRD_JAR ]] || { echo "ERROR: bluebird-stub.jar not found — run: docker compose build e2e" >&2; exit 1; }
-  bb_create_shard_layout   "$host" /opt/trading "$shard"
-  bb_create_debug_binaries "$host" /opt/trading "$shard" "$BLACKBIRD_JAR" "$port"
-  bb_create_rdat           "$host" /opt/trading "$shard" \
-                           "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.in" \
-                           "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.out"
-}
+arg=${1:-}
 
-
-_debug_replay() {
-  local shard="${1:-shard_1}" class="${2:-com.bluebird.trading.OrderEventHandler}"
-  local method="${3:-process}" condition="${4:-orderId=ORD-12345}"
-  local traceFilter="${5:-com.bluebird.trading.*}" traceLimit="${6:-500}"
-  local host_idx container_port host_port
-  # Ports must match docker-compose.yml exposed mappings (container_port → host_port)
-  case "$shard" in
-    shard_1) host_idx=1; container_port=5005; host_port=5005 ;;
-    shard_2) host_idx=1; container_port=5006; host_port=5006 ;;
-    shard_3) host_idx=2; container_port=5005; host_port=5007 ;;
-    shard_4) host_idx=2; container_port=5006; host_port=5008 ;;
-    *) echo "[playground] unknown shard: $shard" >&2; return 1 ;;
-  esac
-  local host="trading-host${host_idx}"
-
-  echo "[playground] debug-replay (trace): $shard  jdwp=localhost:${host_port}"
-  _reset_debug_fixtures "$shard" "$host_idx" "$container_port"
-
-  ssh -F "$SSH_CONFIG" -i "$SSH_KEY" \
-      -o StrictHostKeyChecking=no -o BatchMode=yes -o KexAlgorithms=ecdh-sha2-nistp256 \
-      "deploy@${host}" \
-      "setsid nohup /opt/trading/${shard}/trading/app/trading/bin/start \
-         > /tmp/bluebird-${shard}.log 2>&1 </dev/null & echo \$! > /tmp/bluebird-${shard}.pid"
-
-  # Wait for the JVM to bind its JDWP port inside the container (server-side check)
-  local i=0
-  printf "[playground] waiting for JDWP on %s:%s..." "$host" "$container_port"
-  until ssh -F "$SSH_CONFIG" -i "$SSH_KEY" \
-            -o StrictHostKeyChecking=no -o BatchMode=yes -o KexAlgorithms=ecdh-sha2-nistp256 \
-            "deploy@${host}" \
-            "ss -tlnp 2>/dev/null | grep -q ':${container_port} '" 2>/dev/null; do
-    sleep 0.5; i=$(( i + 1 ))
-    (( i > 20 )) && { echo " timeout"; return 1; }
-    printf '.'
-  done
-  echo " ready"
-
-  echo "[playground] attaching jdi-attacher (--trace-after-hit)..."
-  java --add-modules jdk.jdi -jar "$REPO/tools/jdi-attacher/jdi-attacher.jar" \
-    localhost --port "$host_port" \
-    --class "$class" --method "$method" --condition "$condition" \
-    --trace-after-hit --trace-filter "$traceFilter" --trace-limit "$traceLimit"
-}
-
-_debug_replay_intellij() {
-  local shard="${1:-shard_1}" class="${2:-com.bluebird.trading.OrderEventHandler}"
-  local method="${3:-process}" condition="${4:-orderId=ORD-12345}"
-  local host_idx container_port host_port
-  case "$shard" in
-    shard_1) host_idx=1; container_port=5005; host_port=5005 ;;
-    shard_2) host_idx=1; container_port=5006; host_port=5006 ;;
-    shard_3) host_idx=2; container_port=5005; host_port=5007 ;;
-    shard_4) host_idx=2; container_port=5006; host_port=5008 ;;
-    *) echo "[playground] unknown shard: $shard" >&2; return 1 ;;
-  esac
-  local host="trading-host${host_idx}"
-
-  echo "[playground] debug-replay (IntelliJ): $shard  jdwp=localhost:${host_port}"
-  _reset_debug_fixtures "$shard" "$host_idx" "$container_port"
-
-  ssh -F "$SSH_CONFIG" -i "$SSH_KEY" \
-      -o StrictHostKeyChecking=no -o BatchMode=yes -o KexAlgorithms=ecdh-sha2-nistp256 \
-      "deploy@${host}" \
-      "setsid nohup /opt/trading/${shard}/trading/app/trading/bin/start \
-         > /tmp/bluebird-${shard}.log 2>&1 </dev/null & echo \$! > /tmp/bluebird-${shard}.pid"
-
-  echo
-  echo "[playground] JVM frozen on localhost:${host_port} (suspend=y) — connect IntelliJ now:"
-  echo "  Run > Edit Configurations > + > Remote JVM Debug"
-  echo "  Host: localhost   Port: $host_port"
-  echo "  Set conditional breakpoint:  Class=$class  Method=$method"
-  echo "  Condition: orderId.equals(\"$(echo "$condition" | cut -d= -f2-)\")"
-  echo "  Press Resume — JVM replays rdat.in; IntelliJ catches the hit."
-  echo
-}
-
-# Ensure java is on PATH for both debug commands and the startup flow
-if [[ -z ${JAVA_HOME:-} ]]; then
-  for _jh in "/c/d/i/jdk-25.0.3+9" "/usr/lib/jvm/java-17" "/usr/lib/jvm/java-17-openjdk"; do
-    [[ -x "${_jh}/bin/java" ]] && { export JAVA_HOME="$_jh"; break; }
-  done
-  unset _jh
-fi
-[[ -n ${JAVA_HOME:-} && $PATH != *"${JAVA_HOME}/bin"* ]] && export PATH="${JAVA_HOME}/bin:${PATH}"
-
-case "${1:-}" in
-  --stop)                  _stop;   exit 0 ;;
-  --status)                _status; exit 0 ;;
-  --debug-replay)          shift; _debug_replay "$@"; exit 0 ;;
-  --debug-replay-intellij) shift; _debug_replay_intellij "$@"; exit 0 ;;
-esac
-
-echo "[playground] building images..."
-docker compose -f "$REPO/docker-compose.yml" build e2e target1 target2
-
-echo "[playground] extracting compiled jars from e2e image..."
-_cid=$(docker create shbang-e2e:latest)
-docker cp "$_cid:/app/tools/bluebird-stub/bluebird-stub.jar" "$REPO/tools/bluebird-stub/"
-docker cp "$_cid:/app/tools/jdi-attacher/jdi-attacher.jar"  "$REPO/tools/jdi-attacher/"
-docker rm "$_cid"
-
-echo "[playground] starting target1, target2..."
-docker compose -f "$REPO/docker-compose.yml" up -d target1 target2
-
-_wait_for_ssh trading-host1 2221
-_wait_for_ssh trading-host2 2222
-
-# Write SSH config first so setup can use it
-cat > "$SSH_CONFIG" <<EOF
-Host trading-host1
-  HostName localhost
-  Port 2221
-  User deploy
-  IdentityFile $SSH_KEY
-  StrictHostKeyChecking no
-  BatchMode yes
-  KexAlgorithms ecdh-sha2-nistp256
-
-Host trading-host2
-  HostName localhost
-  Port 2222
-  User deploy
-  IdentityFile $SSH_KEY
-  StrictHostKeyChecking no
-  BatchMode yes
-  KexAlgorithms ecdh-sha2-nistp256
-EOF
-
-export E2E_SSH_KEY="$SSH_KEY"
-export E2E_SSH_CONFIG="$SSH_CONFIG"
-source "$REPO/tests/lib/bbStruct.sh"
-
-echo "[playground] setting up fixture data on targets..."
-FIXTURE_DIR="$REPO/tests/e2e/fixtures"
-INSTALL_BASE="/opt/trading"
-DATE_TAG="20250522"
-
-for shard in shard_1 shard_2; do
-  echo "[playground]   $shard → trading-host1"
-  bb_create_shard_layout trading-host1 "$INSTALL_BASE" "$shard"
-  bb_create_binaries     trading-host1 "$INSTALL_BASE" "$shard"
-  bb_create_archive      trading-host1 "$INSTALL_BASE" "$shard" "$DATE_TAG" "$FIXTURE_DIR/$shard"
-done
-
-for shard in shard_3 shard_4; do
-  echo "[playground]   $shard → trading-host2"
-  bb_create_shard_layout trading-host2 "$INSTALL_BASE" "$shard"
-  bb_create_binaries     trading-host2 "$INSTALL_BASE" "$shard"
-  bb_create_archive      trading-host2 "$INSTALL_BASE" "$shard" "$DATE_TAG" "$FIXTURE_DIR/$shard"
-done
-
-echo "[playground] copying replay-stub.jar to targets..."
-scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host1:/tmp/replay-stub.jar
-scp -F "$SSH_CONFIG" "$REPO/tools/replay-stub/replay-stub.jar" trading-host2:/tmp/replay-stub.jar
-
-echo "[playground] setting up debug-replay fixtures (shard_1, jdwp=5005)..."
-BLACKBIRD_JAR="$REPO/tools/bluebird-stub/bluebird-stub.jar"
-if [[ -f $BLACKBIRD_JAR ]]; then
-  bb_create_debug_binaries trading-host1 "$INSTALL_BASE" shard_1 "$BLACKBIRD_JAR" 5005
-  bb_create_rdat trading-host1 "$INSTALL_BASE" shard_1 \
-    "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.in" \
-    "$REPO/tests/e2e/fixtures/debug-replay/trading.rdat.out"
-else
-  echo "[playground] WARNING: bluebird-stub.jar not found — debug-replay will not work"
+fn=${_CMDS[$arg]:-}
+if [[ -n $fn ]]; then
+  "$fn"
+  exit 0
 fi
 
-export SHBANG_SSH_KEY="$SSH_KEY"
-export SHBANG_SSH_CONFIG="$SSH_CONFIG"
-export HOCON_JAR="$REPO/tools/hocon-to-json/hocon.jar"
-
-# Wire in JAVA_HOME if not already set — needed for HOCON conversion and jdi-attacher
-if [[ -z ${JAVA_HOME:-} ]]; then
-  for _jh in "/c/d/i/jdk-25.0.3+9" "/usr/lib/jvm/java-17" "/usr/lib/jvm/java-17-openjdk"; do
-    [[ -x "${_jh}/bin/java" ]] && { export JAVA_HOME="$_jh"; break; }
-  done
-  unset _jh
+if [[ $arg == --debug-replay || $arg == --debug-replay-intellij ]]; then
+  shift
+  exec "$REPO/bin/playground-debug" "${arg#--}" "$@"
 fi
-[[ -n ${JAVA_HOME:-} && $PATH != *"${JAVA_HOME}/bin"* ]] && export PATH="${JAVA_HOME}/bin:${PATH}"
 
-echo
-echo "[playground] ready. env vars set:"
-echo "  SHBANG_SSH_KEY=$SHBANG_SSH_KEY"
-echo "  SHBANG_SSH_CONFIG=$SHBANG_SSH_CONFIG"
-echo "  HOCON_JAR=$HOCON_JAR"
-[[ -n ${JAVA_HOME:-} ]] && echo "  JAVA_HOME=$JAVA_HOME"
-echo
-echo "  ssh -F $SSH_CONFIG trading-host1"
-echo "  ssh -F $SSH_CONFIG trading-host2"
-echo
-echo "  bin/sh.bang run examples/solace-replay/replay.shbang --ctx examples/solace-replay/environment.json"
-echo
-echo "[playground] debug-replay (always tears down and reinstalls fresh, picks a free JDWP port):"
-echo "  bin/playground --debug-replay          [shard] [class] [method] [condition]  — jdi-attacher trace"
-echo "  bin/playground --debug-replay-intellij [shard] [class] [method] [condition]  — IntelliJ suspend=y"
-echo "  defaults: shard_1  OrderEventHandler  process  orderId=ORD-12345"
-echo
-echo "[playground] tip: 'source bin/playground' to set env vars in your current shell"
-echo "             'bin/playground --stop' to tear down"
+# Default: full setup (sourceable)
+source "$REPO/bin/playground-setup"

@@ -12,19 +12,22 @@ declare -A CMD_DISPATCH=(
 _SHBANG_CTL_DIR="/tmp/.shbang-ctl"
 
 _ssh_opts() {
-  local key_opt= cfg_opt= mux_opts=
-  [[ -n ${SHBANG_SSH_KEY:-}    ]] && key_opt=" -i ${SHBANG_SSH_KEY}"
-  [[ -n ${SHBANG_SSH_CONFIG:-} ]] && cfg_opt=" -F ${SHBANG_SSH_CONFIG}"
+  local -n _out=$1
+  _out=(
+    -o StrictHostKeyChecking=no
+    -o BatchMode=yes
+    -o KexAlgorithms=ecdh-sha2-nistp256
+  )
+  [[ -n ${SHBANG_SSH_KEY:-}    ]] && _out+=(-i "${SHBANG_SSH_KEY}")
+  [[ -n ${SHBANG_SSH_CONFIG:-} ]] && _out+=(-F "${SHBANG_SSH_CONFIG}")
   # ControlMaster uses Unix domain sockets; disable on Windows (Git Bash / MSYS)
   if [[ ${OSTYPE:-} != msys* && ${OSTYPE:-} != cygwin* ]]; then
-    mux_opts=" -o ControlMaster=auto -o ControlPath=${_SHBANG_CTL_DIR}/%r@%h:%p -o ControlPersist=30s"
+    _out+=(
+      -o ControlMaster=auto
+      -o "ControlPath=${_SHBANG_CTL_DIR}/%r@%h:%p"
+      -o ControlPersist=30s
+    )
   fi
-  printf '%s' \
-    "-o StrictHostKeyChecking=no" \
-    " -o BatchMode=yes" \
-    " -o KexAlgorithms=ecdh-sha2-nistp256" \
-    "${mux_opts}" \
-    "${key_opt}${cfg_opt}"
 }
 
 # Registered in EVENT_HANDLERS; skips events not in CMD_DISPATCH.
@@ -83,13 +86,13 @@ dispatch_scp() {
   local path=${ds_event[path]}
   local verb=${ds_event[verb]}
   local args=${ds_event[args]}
+  local -a opts; _ssh_opts opts
 
-  # shellcheck disable=SC2046
   case $verb in
-    send)  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' scp $(_ssh_opts) "$args" "${user}@${host}:${path}" 2>&1 | sed \
+    send)  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' scp "${opts[@]}" "$args" "${user}@${host}:${path}" 2>&1 | sed \
       -e 's/^/│  /' \
       -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
-    fetch) MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' scp $(_ssh_opts) "${user}@${host}:${path}" "$args" 2>&1 | sed \
+    fetch) MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' scp "${opts[@]}" "${user}@${host}:${path}" "$args" 2>&1 | sed \
       -e 's/^/│  /' \
       -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
     *)     log_debug "dispatch_scp: unknown verb: $verb" ;;
@@ -104,13 +107,11 @@ dispatch_ssh() {
   local verb=${dsh_event[verb]}
   local args=${dsh_event[args]}
 
-  # shellcheck disable=SC2046
-  case $verb in
-    run) MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ssh $(_ssh_opts) "${user}@${host}" "cd ${path} && ${args}" 2>&1 | sed \
-      -e 's/^/│  /' \
-      -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/' ;;
-    *)   log_debug "dispatch_ssh: unknown verb: $verb" ;;
-  esac
+  [[ $verb == run ]] || { log_debug "dispatch_ssh: unknown verb: $verb"; return; }
+  local -a opts; _ssh_opts opts
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ssh "${opts[@]}" "${user}@${host}" "cd ${path} && ${args}" 2>&1 | sed \
+    -e 's/^/│  /' \
+    -e 's/\(│  \(ssh:\|scp:\|Warning:\|Error:\).*\)/\x1b[1;31m\1\x1b[0m/'
 }
 
 dispatch_local() {

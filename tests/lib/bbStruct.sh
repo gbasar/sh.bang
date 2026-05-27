@@ -26,25 +26,28 @@
 # ---------------------------------------------------------------------------
 
 _bb_ssh_opts() {
-  local key="${1:-${E2E_SSH_KEY:-/root/.ssh/e2e_test_key}}"
+  local -n _out=$1
+  local key="${2:-${E2E_SSH_KEY:-/root/.ssh/e2e_test_key}}"
   local cfg="${E2E_SSH_CONFIG:-}"
-  local opts="-o StrictHostKeyChecking=no -o BatchMode=yes -o KexAlgorithms=ecdh-sha2-nistp256 -i ${key}"
-  [[ -n $cfg ]] && opts="-F ${cfg} ${opts}"
-  printf -- '%s' "$opts"
+  _out=(
+    -o StrictHostKeyChecking=no
+    -o BatchMode=yes
+    -o KexAlgorithms=ecdh-sha2-nistp256
+    -i "$key"
+  )
+  [[ -n $cfg ]] && _out+=(-F "$cfg")
 }
 
 _bb_ssh() {
   local host=$1 key=$2
   shift 2
-  local opts
-  read -r -a opts <<< "$(_bb_ssh_opts "$key")"
+  local -a opts; _bb_ssh_opts opts "$key"
   ssh "${opts[@]}" "deploy@${host}" "$@"
 }
 
 _bb_scp() {
   local src=$1 dst=$2 key=$3
-  local opts
-  read -r -a opts <<< "$(_bb_ssh_opts "$key")"
+  local -a opts; _bb_ssh_opts opts "$key"
   scp "${opts[@]}" "$src" "$dst"
 }
 

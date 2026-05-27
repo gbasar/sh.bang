@@ -4,8 +4,6 @@
 # Using a queue rather than nested emit_kv calls avoids Bash nameref depth limits.
 _CMD_QUEUE=()
 
-# ---------- selector / variable helpers ----------
-
 selector_to_jq() {
   local sel=$1
   # trading.shards[*]   → .trading.shards[]       (iterate all values)
@@ -45,8 +43,6 @@ render_vars() {
 
   printf '%s' "$result"
 }
-
-# ---------- expand handlers ----------
 
 declare -A EXPAND_HANDLERS=(
   [parser.resource]=expand_resource
@@ -134,15 +130,9 @@ expand_pipe() {
       continue
     fi
 
-    local cmd_type
-    case $prefix in
-      @)
-        case $verb in
-          send|fetch) cmd_type=cmd.scp ;;
-          *)          cmd_type=cmd.ssh ;;
-        esac ;;
-      *)  log_debug "expand: unknown subject prefix in: $subject"; continue ;;
-    esac
+    [[ $prefix == @ ]] || { log_debug "expand: unknown subject prefix in: $subject"; continue; }
+    local -A _verb_type=([send]=cmd.scp [fetch]=cmd.scp)
+    local cmd_type=${_verb_type[$verb]:-cmd.ssh}
 
     # Serialise to JSON and push onto the queue — no nested emit_kv needed
     # MSYS_NO_PATHCONV+MSYS2_ARG_CONV_EXCL prevent Git Bash from converting
